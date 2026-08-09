@@ -9,18 +9,7 @@ import {
   releaseState,
 } from './lib/environment'
 import { supabase } from './lib/supabase'
-
-type NavGroup = { label: string; items: string[] }
-
-const navGroups: NavGroup[] = [
-  { label: 'GENEL', items: ['Genel Bakış'] },
-  { label: 'SATIŞ & MÜŞTERİ', items: ['Müşteriler', 'Sellout', 'FKNS'] },
-  { label: 'STOK & PLANLAMA', items: ['Depo Stoku', 'Ticari Stok', 'Talep & Sipariş Planlama'] },
-  { label: 'OPERASYON', items: ['Siparişler', 'Sevkiyat', 'Fatura Kontrol'] },
-  { label: 'FİNANS', items: ['Cari 360', 'Tahsilatlar', 'Çek / Senet', 'Finansal Analiz'] },
-  { label: 'ANALİZ', items: ['Rapor Merkezi', 'AI Asistan'] },
-  { label: 'YÖNETİM', items: ['Veri Yükleme', 'Sistem Sağlığı', 'Ayarlar'] },
-]
+import { getVisibleNavGroups } from './lib/navigation'
 
 function releaseStateText() {
   if (releaseState === 'LIVE_TESTING') return 'Canlı testte'
@@ -97,7 +86,7 @@ export function App() {
           <button className="icon-button close-mobile" type="button" aria-label="Menüyü kapat" onClick={() => setMobileNavOpen(false)}>×</button>
         </div>
         <nav>
-          {navGroups.map((group) => (
+          {getVisibleNavGroups(role).map((group) => (
             <section className="nav-group" key={group.label} aria-label={group.label}>
               <h2>{group.label}</h2>
               {group.items.map((item) => (
