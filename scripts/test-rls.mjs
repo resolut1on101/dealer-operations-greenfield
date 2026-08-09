@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { resolveDockerCommand } from './docker-cli.mjs';
 
 const projectRef = 'dealer-operations-greenfield';
-const list = spawnSync('docker', [
+const docker = resolveDockerCommand();
+const list = spawnSync(docker, [
   'ps', '--filter', `label=com.supabase.cli.project=${projectRef}`, '--format', '{{.ID}} {{.Names}}',
 ], { encoding: 'utf8' });
 
@@ -22,7 +24,7 @@ if (!containerId) {
 }
 
 const sql = readFileSync(new URL('../supabase/tests/rls-foundation.sql', import.meta.url), 'utf8');
-const result = spawnSync('docker', [
+const result = spawnSync(docker, [
   'exec', '-i', containerId, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1',
 ], { input: sql, encoding: 'utf8' });
 

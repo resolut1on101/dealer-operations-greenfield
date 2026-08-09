@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { buildWindowsCommandLine } from './backup-logical-helpers.mjs';
 
 function argument(name) {
   const index = process.argv.indexOf(name);
@@ -25,9 +26,23 @@ const outputPath = resolve(output);
 mkdirSync(dirname(outputPath), { recursive: true });
 // Schema recovery is version-controlled through migrations. The checkpoint is
 // data-only so it restores cleanly after `supabase db reset --local`.
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(npx, ['supabase', 'db', 'dump', '--db-url', databaseUrl, '--schema', 'public', '--data-only', '--file', outputPath], {
-  stdio: 'inherit',
-});
-if (result.status !== 0) process.exit(result.status ?? 1);
+const dumpArgs = ['supabase', 'db', 'dump', '--db-url', databaseUrl, '--schema', 'public', '--data-only', '--file', outputPath];
+const result = process.platform === 'win32'
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', buildWindowsCommandLine('npx', dumpArgs)], {
+      encoding: 'utf8',
+    })
+  : spawnSync('npx', dumpArgs, {
+      encoding: 'utf8',
+    });
+
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
+if (result.error) {
+  console.error('Logical backup failed with a spawn error:');
+  console.error(result.error);
+}
+if (result.status !== 0) {
+  console.error(`Logical backup exited with status ${result.status ?? 'unknown'}.`);
+  process.exit(result.status ?? 1);
+}
 console.log(`Logical backup completed: ${outputPath}`);

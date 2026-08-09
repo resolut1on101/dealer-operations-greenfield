@@ -1,9 +1,9 @@
 # Package 00C Implementation Report
 
-**Package:** `00C — First live release and safe operating base`  
+**Package:** `00C - First live release and safe operating base`  
 **Agent:** Terra  
 **Difficulty/Effort:** `HIGH/high`  
-**Status:** `DEPLOYED_TO_LIVE / AWAITING_USER_ACCEPTANCE`
+**Status:** `VERIFIED / ACCEPTED`
 
 ## Delivered scope
 
@@ -17,14 +17,14 @@
 
 | Check | Result |
 |---|---|
-| `npm run verify` | PASS — lint, TypeScript, unit tests, production build |
-| Package 00C release metadata tests | PASS — 2 tests |
-| `npm run test:rls` | PASS — anon/viewer/admin enforcement and serialized first-admin bootstrap |
-| Local data-only dump → reset → restore rehearsal | PASS |
+| `npm run verify` | PASS - lint, TypeScript, unit tests, production build |
+| Package 00C release metadata tests | PASS - 2 tests |
+| `npm run test:rls` | PASS - anon/viewer/admin enforcement and serialized first-admin bootstrap |
+| Local data-only dump -> reset -> restore rehearsal | PASS |
 | RLS regression after restore rehearsal | PASS |
 | Live RLS regression (`supabase/tests/rls-foundation.sql`, rollback transaction) | PASS |
-| Cloudflare Pages production deployment | PASS — `3b9298cc` / build `470de4b` |
+| Cloudflare Pages production deployment | PASS - `7b60e51d` / build `fa5fefc` |
 
 ## Deployment gate
 
-Live Supabase project `ncwtlaiormtunpryxjmu` is linked and all four Package 00 migrations match local history. Cloudflare Pages production deployment is live at `https://3b9298cc.dealer-operations-greenfield.pages.dev` with build `470de4b`, database migration `20260809000003`, and release state `LIVE_TESTING`. User acceptance is pending. The first live deployment remains `LIVE_TESTING`; only a user PASS permits a `VERIFIED` redeploy and package closeout.
+Live Supabase project `ncwtlaiormtunpryxjmu` is linked and all four Package 00 migrations match local history. Cloudflare Pages production deployment is live at `https://7b60e51d.dealer-operations-greenfield.pages.dev` with build `fa5fefc`, database migration `20260809000003`, and release state `VERIFIED`. Package 00C is accepted and closed out.

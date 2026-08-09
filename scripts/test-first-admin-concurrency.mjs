@@ -1,11 +1,13 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { resolveDockerCommand } from './docker-cli.mjs';
 
 const projectRef = 'dealer-operations-greenfield';
 const firstTargetId = '20000000-0000-0000-0000-000000000001';
 const secondTargetId = '20000000-0000-0000-0000-000000000002';
+const docker = resolveDockerCommand();
 
 function findDatabaseContainer() {
-  const list = execFileSync('docker', [
+  const list = execFileSync(docker, [
     'ps', '--filter', `label=com.supabase.cli.project=${projectRef}`, '--format', '{{.ID}} {{.Names}}',
   ], { encoding: 'utf8' });
   const containerId = list.trim().split(/\r?\n/)
@@ -15,7 +17,7 @@ function findDatabaseContainer() {
 }
 
 function psql(containerId, sql) {
-  const result = spawnSync('docker', [
+  const result = spawnSync(docker, [
     'exec', '-i', containerId, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At',
   ], { input: sql, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr || 'psql command failed');
@@ -23,7 +25,7 @@ function psql(containerId, sql) {
 }
 
 function psqlSession(containerId, sql) {
-  const child = spawn('docker', [
+  const child = spawn(docker, [
     'exec', '-i', containerId, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At',
   ], { stdio: ['pipe', 'pipe', 'pipe'] });
   child.stdin.end(sql);

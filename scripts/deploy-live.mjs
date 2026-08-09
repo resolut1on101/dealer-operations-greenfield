@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { runCrossPlatform } from './backup-logical-helpers.mjs';
 
 const required = [
   'VITE_SUPABASE_URL',
@@ -7,16 +8,14 @@ const required = [
   'VITE_DB_MIGRATION_VERSION',
 ];
 const missing = required.filter((name) => !process.env[name]);
-if (process.env.VITE_APP_ENV !== 'live' || process.env.VITE_RELEASE_STATE !== 'LIVE_TESTING') {
-  throw new Error('First live deploy requires VITE_APP_ENV=live and VITE_RELEASE_STATE=LIVE_TESTING.');
+if (process.env.VITE_APP_ENV !== 'live' || !['LIVE_TESTING', 'VERIFIED'].includes(process.env.VITE_RELEASE_STATE ?? '')) {
+  throw new Error('Live deploy requires VITE_APP_ENV=live and VITE_RELEASE_STATE=LIVE_TESTING or VERIFIED.');
 }
 if (missing.length > 0) throw new Error(`Live deploy is missing required environment variables: ${missing.join(', ')}`);
 
 function run(command, args) {
-  if (process.platform === 'win32') {
-    return spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `${command} ${args.join(' ')}`], { stdio: 'inherit' });
-  }
-  return spawnSync(command, args, { stdio: 'inherit' });
+  const invocation = runCrossPlatform(command, args, { stdio: 'inherit' });
+  return spawnSync(invocation.command, invocation.args, invocation.options);
 }
 
 const verify = run('npm', ['run', 'verify']);

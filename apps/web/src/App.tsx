@@ -5,7 +5,6 @@ import {
   buildVersion,
   databaseMigrationVersion,
   isSupabaseConfigured,
-  releasePackage,
   releaseState,
 } from './lib/environment'
 import { supabase } from './lib/supabase'
@@ -16,6 +15,8 @@ function releaseStateText() {
   if (releaseState === 'VERIFIED') return 'Doğrulandı'
   return 'Engellendi'
 }
+
+const visiblePackageLabel = '01'
 
 export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -74,7 +75,7 @@ export function App() {
         <div className="breadcrumbs"><span>Dealer Operations</span><span aria-hidden="true">/</span><strong>{activeItem}</strong></div>
         <div className="utility-actions">
           <span className={`release-badge ${releaseState.toLowerCase()}`}>{releaseStateText()}</span>
-          <span className="build-indicator" title={`Paket ${releasePackage}`}>build {buildVersion}</span>
+          <span className="build-indicator" title={`Paket ${visiblePackageLabel}`}>build {buildVersion}</span>
           {role ? <button className="text-button" type="button" onClick={signOut}>Çıkış yap</button> : null}
         </div>
       </header>
@@ -102,11 +103,11 @@ export function App() {
 
       <main className={`content ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`} aria-labelledby="page-title">
         <section className="page-context">
-          <p className="eyebrow">PAKET 00C · CANLI İŞLETİM TABANI</p><h1 id="page-title">{activeItem}</h1>
+          <p className="eyebrow">PAKET {visiblePackageLabel} · CANLI İŞLETİM TABANI</p><h1 id="page-title">{activeItem}</h1>
           <p>Ürün alan verileri henüz yayınlanmadı. Bu canlı kabuk, doğrulanmış erişim ve güvenli sürüm görünürlüğü için hazırdır.</p>
         </section>
         <section className="status-grid" aria-label="Canlı sürüm durumu">
-          <article className="status-panel"><p className="panel-label">Yayın durumu</p><strong>{releaseStateText()}</strong><span>Paket {releasePackage} · {applicationEnvironment}</span></article>
+          <article className="status-panel"><p className="panel-label">Yayın durumu</p><strong>{releaseStateText()}</strong><span>Paket {visiblePackageLabel} · {applicationEnvironment}</span></article>
           <article className="status-panel"><p className="panel-label">Resmî veri</p><strong>Henüz yayın yok</strong><span>Alan verisi veya deneme veri kümesi gösterilmez.</span></article>
           <article className="status-panel"><p className="panel-label">Build kimliği</p><strong>{buildVersion}</strong><span>DB migration {databaseMigrationVersion}</span></article>
         </section>

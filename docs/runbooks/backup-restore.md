@@ -22,6 +22,8 @@ Before a live migration or first live deploy:
    npm run backup:logical -- --environment live --confirm-live-backup --output C:\secure-backups\dealer-operations-<timestamp>.sql
    ```
 
+   On Windows, the backup script now invokes `npx` through `cmd.exe /c` so the `supabase db dump` call is executed reliably and any spawn failure is printed with the exit status.
+
 `SUPABASE_LIVE_DB_URL` is a secret and must never be committed, pasted into issue text, or placed in frontend variables.
 
 ## Local restore rehearsal
