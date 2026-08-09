@@ -3,7 +3,7 @@
 **Package:** `00C — First live release and safe operating base`  
 **Agent:** Terra  
 **Difficulty/Effort:** `HIGH/high`  
-**Status:** `AUTOMATED_TESTS_PASSED / DEPLOYMENT_PENDING`
+**Status:** `DEPLOYED_TO_LIVE / AWAITING_USER_ACCEPTANCE`
 
 ## Delivered scope
 
@@ -22,7 +22,9 @@
 | `npm run test:rls` | PASS — anon/viewer/admin enforcement and serialized first-admin bootstrap |
 | Local data-only dump → reset → restore rehearsal | PASS |
 | RLS regression after restore rehearsal | PASS |
+| Live RLS regression (`supabase/tests/rls-foundation.sql`, rollback transaction) | PASS |
+| Cloudflare Pages production deployment | PASS — `15bf1087-f6ad-4360-b3d0-95f7277415c7` |
 
 ## Deployment gate
 
-Cloudflare operator authentication is established, but the account has no Cloudflare Pages project yet. The Supabase account has only the separate `dealer-operations-dev` project; a live Supabase project has not been created. No live deployment, live user, or production mutation was attempted. The first live deployment must use `VITE_RELEASE_STATE=LIVE_TESTING`; only a user PASS permits a `VERIFIED` redeploy and package closeout.
+Live Supabase project `ncwtlaiormtunpryxjmu` is linked and all four Package 00 migrations match local history. Cloudflare Pages production deployment is live at `https://15bf1087.dealer-operations-greenfield.pages.dev` with build `8b05985`, database migration `20260809000003`, and release state `LIVE_TESTING`. User acceptance is pending. The first live deployment remains `LIVE_TESTING`; only a user PASS permits a `VERIFIED` redeploy and package closeout.
