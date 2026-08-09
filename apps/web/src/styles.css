@@ -1,0 +1,6 @@
+:root { font-family: system-ui, sans-serif; color: #172033; background: #ffffff; }
+body { margin: 0; }
+.technical-foundation { max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; }
+dl > div { display: flex; gap: 1rem; margin-block: .5rem; }
+dt { font-weight: 700; }
+dd { margin: 0; }

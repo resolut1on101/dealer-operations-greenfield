@@ -1,0 +1,2 @@
+-- Package 00 deliberately has no seed users or business data.
+-- Later packages may add synthetic local-only fixtures through reviewed migrations or seed scripts.
