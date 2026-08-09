@@ -29,7 +29,7 @@ Tarayıcı sadece publishable key kullanır. `service_role` ve diğer gizli anah
 
 ## Geliştirme karmaşıklığı ve yüksek hacimli import etkisi
 
-Paket 00 import motoru kodlamaz. Paket 01’de 10K/25K/50K Excel için parse işlemi Web Worker’da, staging/bulk yazım PostgreSQL’de set-based/batched yürütülecektir. Satır başına HTTP çağrısı, satır başına transaction veya tarayıcıda on binlerce DOM satırı yasaktır. Bu stack Web Worker, Storage evidence, SQL bulk/RPC, keyset pagination ve aggregate read model yaklaşımını destekler.
+Paket 00 import motoru kodlamaz. **10K/25K/50K XLSX parse işlemi varsayılan olarak Supabase Edge Function içinde yapılmayacaktır.** Paket 01’in canonical yönü şudur: **Browser Web Worker parse → chunk/bulk staging → PostgreSQL RPC/set-based validation/reconciliation → candidate publication → atomic publish.** Edge Functions yalnız gerektiğinde güvenilir server-side orchestration/security boundary olarak kullanılabilir; uzun XLSX parsing ve satır-başı işlem Edge Function’a taşınamaz. Satır başına HTTP çağrısı, satır başına transaction veya tarayıcıda on binlerce DOM satırı yasaktır. Bu stack Web Worker, Storage evidence, SQL bulk/RPC, keyset pagination ve aggregate read model yaklaşımını destekler.
 
 ## Free-tier ve deploy etkisi
 

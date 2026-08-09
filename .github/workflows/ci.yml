@@ -33,3 +33,4 @@ jobs:
       - run: npm ci
       - run: npm run supabase -- start -x studio,imgproxy,logflare,vector
       - run: npm run supabase -- db reset --local
+      - run: npm run test:rls
