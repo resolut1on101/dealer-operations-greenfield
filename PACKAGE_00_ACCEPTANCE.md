@@ -62,6 +62,10 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 
 ## Git ve CI
 
+- Concurrency foundation verification commit: `487596efdffb458ae6485e28db2086e05286cc9e`.
+- GitHub Actions [CI run #4](https://github.com/resolut1on101/dealer-operations-greenfield/actions/runs/31306505864) for that commit: `quality = success`, `migration-check = success` (including the clean reset and two-session concurrency test).
+- The safe review archive is regenerated only with `npm run review:zip` from a clean `HEAD`; its filename embeds the exact archived `HEAD` SHA. It is a git-archive output, not a working-directory ZIP, and is ignored by Git.
+
 - Foundation commit: `7465796302ce66db01f873c6392369f12327c7f5`
 - Önceki kabul kaydı commit: `a5d4e3c127cca58b87407f144877b3ca6806b9a4`
 - Bu güncellemenin kapanış SHA’sı commit oluşturulduktan sonra dış kapanış mesajında verilir; belge kendi commit hash’ini içeremez.
