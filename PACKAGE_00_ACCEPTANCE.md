@@ -57,6 +57,13 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 - Git remote yoktur: `REMOTE: USER DECISION REQUIRED`.
 - `.github/workflows/ci.yml` quality ve migration-check (reset + `test:rls`) tanımlar; remote/push olmadığından GitHub Actions çalıştırılmadı. **CI: FAIL (CONFIGURED_BUT_NOT_RUN; gerçek CI PASS değildir).**
 
+## Review bundle güvenliği
+
+- `npm run review:zip`, yalnız temiz ve commit edilmiş tracked dosyalardan `git archive HEAD` ile ZIP üretir; çalışma klasörü doğrudan arşivlenmez.
+- ZIP üretilmeden önce tracked path kontrolü `.git/`, `node_modules/`, `dist/`, `coverage/`, `playwright-report/`, `test-results/`, `.env`, `.env.*` (boş şablon `.env.example` hariç), `supabase/.temp/`, cache/temp ve log yollarını reddeder.
+- Aynı ön kontrol private key, JWT-benzeri değer ve non-empty service-role/API/private/Gemini/OpenAI secret atamalarını tarar; bulgu varsa ZIP oluşturmaz. Review bundle içinden commit SHA bu belgeden görülebilir, `.git` eklenmez.
+- Review Bundle: `PASS` (bu mekanizma çalıştırılıp içeriği doğrulanır); Secret Scan: `PASS`; Excluded Runtime: `PASS`.
+
 ## Açık bloklayıcılar
 
 1. Kullanıcının teknik stack onayı.
