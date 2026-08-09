@@ -3,9 +3,9 @@
 Paket              : `00C — First live release and safe operating base`  
 Ajan                : Terra  
 Zorluk / Ayar       : `YÜKSEK/high`  
-Canlı build         : `8b05985`  
+Canlı build         : `470de4b`  
 DB migration        : `20260809000003`  
-Canlı URL           : `https://15bf1087.dealer-operations-greenfield.pages.dev`  
+Canlı URL           : `https://3b9298cc.dealer-operations-greenfield.pages.dev`  
 Yayın durumu        : `LIVE_TESTING`  
 Test kapsamı        : Onaylı D0 shell, admin/viewer erişim temeli, canlı build/release görünürlüğü ve yedek/restore güvenlik tabanı. Alan verisi, import veya metrik testi bu paketin kapsamında değildir.
 
@@ -29,7 +29,7 @@ Test kapsamı        : Onaylı D0 shell, admin/viewer erişim temeli, canlı bui
 ## TEST-01 — Canlı URL, build ve yayın durumu
 
 Yapılacak işlem     : Canlı URL’yi birinci cihaz/tarayıcıda açın.  
-Beklenen sonuç      : Sayfa açılır; üst barda `Canlı testte`, build olarak `8b05985`, içerikte Paket `00C` ve DB migration `20260809000003` görünür. `Doğrulandı` veya `ACCEPTED` görünmez.  
+Beklenen sonuç      : Sayfa açılır; üst barda `Canlı testte`, build olarak `470de4b`, içerikte Paket `00C` ve DB migration `20260809000003` görünür. `Doğrulandı` veya `ACCEPTED` görünmez.  
 Kontrol kaynağı     : Canlı ekran.
 
 ## TEST-02 — Yönetici girişi
@@ -74,7 +74,7 @@ TEST-05 PASS
 Bir hata varsa:
 
 ```text
-TEST-<no> FAIL — beklenen: <...>, görülen: <...>, cihaz/tarayıcı: <...>, build: 8b05985
+TEST-<no> FAIL — beklenen: <...>, görülen: <...>, cihaz/tarayıcı: <...>, build: 470de4b
 ```
 
 Her zorunlu test PASS olmadan paket `VERIFIED` veya `ACCEPTED` değildir.
