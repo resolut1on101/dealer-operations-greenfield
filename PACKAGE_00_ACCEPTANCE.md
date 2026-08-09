@@ -67,6 +67,10 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 - Aynı ön kontrol private key, JWT-benzeri değer ve non-empty service-role/API/private/Gemini/OpenAI secret atamalarını tarar; bulgu varsa ZIP oluşturmaz. Review bundle içinden commit SHA bu belgeden görülebilir, `.git` eklenmez.
 - Review Bundle: `PASS` (bu mekanizma çalıştırılıp içeriği doğrulanır); Secret Scan: `PASS`; Excluded Runtime: `PASS`.
 
+## Dış veri referansı
+
+Paket 01’in ileride kullanacağı repo-dışı READ-ONLY veri referans yapısı `C:\Users\monds\Desktop\YENI\VERI_REFERANS` olarak kaydedildi. Klasör sözleşmesi ve gerçek Excel koruma kuralları [data-reference-boundary.md](docs/architecture/data-reference-boundary.md) içindedir. Bu kayıt import motoru, parser, database import tablosu veya fixture üretimi içermez.
+
 ## Açık bloklayıcılar
 
 1. Kullanıcının teknik stack onayı.

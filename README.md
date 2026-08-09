@@ -30,3 +30,7 @@ The local Supabase stack must never be exposed to external traffic. Migrations a
 | live | User-facing releases from Package 00C | published business data |
 
 See `docs/runbooks/environment-and-release.md` and `docs/runbooks/backup-restore.md` before deploying.
+
+## External data reference
+
+The Package 01 external READ-ONLY data-reference boundary is documented in [data-reference-boundary.md](docs/architecture/data-reference-boundary.md). It is outside this repository and does not authorize Package 01 implementation work.
