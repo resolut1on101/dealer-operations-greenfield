@@ -17,6 +17,9 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:rls": "node scripts/test-rls.mjs",
+    "backup:logical": "node scripts/backup-logical.mjs",
+    "restore:rehearsal": "node scripts/restore-rehearsal.mjs",
+    "deploy:live": "node scripts/deploy-live.mjs",
     "review:zip": "node scripts/create-review-zip.mjs",
     "test:e2e": "playwright test",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
@@ -24,7 +27,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
-    "supabase": "^2.39.2"
+    "supabase": "^2.39.2",
+    "wrangler": "^4.120.0"
   },
   "allowScripts": {
     "esbuild@0.28.2": true
