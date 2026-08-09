@@ -11,6 +11,12 @@
 3. Copy the reported local URL and publishable key to `.env.local`.
 4. Run `npm run supabase -- db reset --local` to validate all migrations from a clean database.
 
+## First-admin concurrency guarantee
+
+`bootstrap_first_admin(exact_user_uuid)` takes a deterministic, transaction-scoped PostgreSQL advisory lock before it checks for an existing admin. Calls for different target UUIDs are globally serialized: one transaction can create the first admin, and a waiting concurrent transaction rechecks after the lock is released and fails because an admin now exists. The procedure remains service-role-only and idempotent for the same already-admin UUID.
+
+`npm run test:rls` runs the version-controlled `scripts/test-first-admin-concurrency.mjs` integration test after the RLS foundation test. It opens two independent local PostgreSQL sessions; the first holds the same advisory lock while it bootstraps the first target, and the second attempts a different target concurrently. The expected result is exactly one `admin` and one rejected call.
+
 ## Dev and live
 
 1. Link the intended remote project explicitly with its project ref.

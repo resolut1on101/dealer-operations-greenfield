@@ -52,6 +52,14 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 | `npm run test:rls` | 0 | PASS — transaction rollback ile RLS/bootstrap entegrasyon testi |
 | `npm run supabase -- db query --linked --file supabase/tests/rls-foundation.sql` | 0 | PASS — DEV üzerinde synthetic/rollback RLS testi |
 
+## First-admin concurrency
+
+**Current verification note (2026-08-09):** the new fourth migration is locally reset and tested. The previously linked DEV project has the first three Package 00 migrations; applying and rechecking the fourth migration requires a renewed trusted Supabase CLI access token. No previous token is stored in this repository, and no LIVE target is touched. User technical stack approval is also still pending.
+
+- Migration `20260809000003_first_admin_global_lock.sql` makes `bootstrap_first_admin(exact_user_uuid)` acquire a deterministic transaction-scoped PostgreSQL advisory lock before it inspects or mutates `user_profiles`.
+- The version-controlled `scripts/test-first-admin-concurrency.mjs` test is invoked by `npm run test:rls` and therefore by CI's `migration-check` job after a local reset. It opens two independent database sessions for two different UUID targets. The first session wins; the second waits for the global lock, observes the newly-created admin, and fails. The test asserts the final roles are exactly one `admin` and one `viewer`.
+- Local result after the four Package 00 migrations: `PASS` -- `Concurrent first-admin bootstrap PASS: two independent DB sessions produced one admin and one rejected call.`
+
 ## Git ve CI
 
 - Foundation commit: `7465796302ce66db01f873c6392369f12327c7f5`

@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const projectRef = 'dealer-operations-greenfield';
 const list = spawnSync('docker', [
@@ -27,4 +28,11 @@ const result = spawnSync('docker', [
 
 process.stdout.write(result.stdout);
 process.stderr.write(result.stderr);
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+const concurrency = spawnSync(process.execPath, [
+  fileURLToPath(new URL('./test-first-admin-concurrency.mjs', import.meta.url)),
+], { encoding: 'utf8' });
+process.stdout.write(concurrency.stdout);
+process.stderr.write(concurrency.stderr);
+process.exit(concurrency.status ?? 1);
