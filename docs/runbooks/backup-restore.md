@@ -1,5 +1,12 @@
 # Backup and Restore Boundary
 
-Package 00 establishes the repository and migration discipline. The executable logical export/restore rehearsal, Storage inventory and live backup checkpoint are required before the first live release in Package 00C.
+Package 00 establishes repository and migration discipline only.
 
-Until Package 00C, no production business data is introduced into this project.
+Before the first live release in **Package 00C**, all of the following are mandatory:
+
+- executable logical export procedure,
+- restore rehearsal,
+- Storage inventory/checkpoint,
+- live backup checkpoint.
+
+No production business data is introduced before Package 00C.

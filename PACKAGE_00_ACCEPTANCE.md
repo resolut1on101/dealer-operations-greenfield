@@ -72,8 +72,8 @@ Environment data boundary:
 - Prior acceptance-record commit: `a5d4e3c127cca58b87407f144877b3ca6806b9a4`
 - The final closure SHA is reported after commit; this document cannot contain its own final commit hash.
 - Remote: `origin https://github.com/resolut1on101/dealer-operations-greenfield.git`; `main` pushed.
-- GitHub Actions CI run #1: `quality = success`, `migration-check = success`.
-- **CI: PASS.**
+- Final HEAD CI evidence is verified after this acceptance record is committed and is reported with the final closure SHA and run URL.
+- Required final jobs: `quality = PASS`, `migration-check = PASS`.
 
 ## 8. Review-bundle safety
 
@@ -93,6 +93,6 @@ Future Package 01 external read-only data reference:
 
 See [`docs/architecture/data-reference-boundary.md`](docs/architecture/data-reference-boundary.md). This record does not implement an import engine, parser, import table, or fixture generation.
 
-## Open blocker
+## Open blockers
 
-1. Explicit user technical stack approval.
+None. The user explicitly approved the technical stack and architecture before Package 00 closure.

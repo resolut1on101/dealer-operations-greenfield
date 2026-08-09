@@ -1,21 +1,24 @@
-# Supabase Free-tier Baseline
+# Supabase Free-Tier Baseline
 
-**Doğrulama tarihi:** 2026-08-09
-**Resmî kaynak:** <https://supabase.com/pricing>
+**Verified:** 2026-08-09  
+**Official source:** <https://supabase.com/pricing>
 
-| Kaynak | Free baseline |
+| Resource | Free baseline |
 |---|---:|
-| PostgreSQL database | 500 MB / proje |
+| PostgreSQL database | 500 MB / project |
 | Storage | 1 GB |
-| Maximum individual file / global Storage upload | 50 MB |
+| Maximum individual/global Storage upload | 50 MB |
 | Egress | 5 GB |
 | Cached egress | 5 GB |
 | Active hosted projects | 2 |
-| Otomatik backup | Dahil değil |
-| Inactivity | Proje 1 hafta hareketsizlikten sonra pause olabilir |
+| Automatic backup | Not included |
+| Inactivity | Project may pause after one week of inactivity |
 
-Bu değerler business logic içine yazılmaz. Sadece planlama bütçesi, System Health threshold girdisi ve deployment-time doğrulama için kullanılır. Sağlayıcı limitleri değişebileceğinden **deployment sırasında yeniden doğrulanır**.
+## Rules
 
-İki aktif hosted proje hakkı, ayrı **dev** ve **live** Supabase projeleri tarafından kullanılacaktır. `local`, Docker ile çalışır ve bu hosted proje kotasına dahil değildir. 50 MB upload limiti import iş kuralı değildir; Paket 01 tasarım/doğrulama ve deployment-time kontrol girdisidir.
-
-Free planın otomatik backup sağlamaması nedeniyle ilk canlı yayın öncesinde (Paket 00C) mantıksal export/restore runbook ve rehearsal zorunludur.
+- Never hardcode these provider limits into business logic.
+- Re-verify them at deployment time because provider limits can change.
+- Use them only for planning budgets, System Health thresholds, and deployment validation.
+- The two active hosted projects are reserved for separate `dev` and `live` environments. Local Docker does not consume a hosted-project slot.
+- The 50 MB upload limit is a Package 01 design/validation input, not an application import rule.
+- Because the Free plan has no automatic backup, a logical export/restore runbook and rehearsal are mandatory before the first live release in Package 00C.

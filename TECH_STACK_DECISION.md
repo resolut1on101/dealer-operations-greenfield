@@ -1,44 +1,54 @@
-# Paket 00 — Teknik Yığın Kararı
+# Package 00 — Technical Stack Decision
 
-**Karar tarihi:** 2026-08-09
-**Kapsam:** Greenfield teknik temel; business domain, import motoru ve D0 tasarımı içermez.
+**Decision date:** 2026-08-09  
+**Scope:** Greenfield technical foundation only; excludes business domain, import engine, and D0 design.
 
-## Seçilen yaklaşım
+## Selected stack
 
-- **Frontend:** React 19, TypeScript, Vite, React Router, TanStack Query ve Zod.
-- **Backend/API:** Ayrı bir sürekli çalışan Node API yoktur. Normal read yüzeyleri Supabase’in RLS korumalı API’sine; güvenilir mutation, publish ve daha sonraki ağır süreçler version-controlled Supabase Edge Functions veya PostgreSQL RPC’lerine gider.
-- **Veri katmanı:** Supabase PostgreSQL resmî ve tek source of truth’tur. Auth ve Storage Supabase üzerinden sağlanır.
-- **Dağıtım:** Statik frontend Cloudflare Pages; backend/data ayrı Supabase `dev` ve `live` projeleridir. Paket 00 canlı deploy içermez; ilk canlı yayın Paket 00C’dedir.
+- **Frontend:** React 19, TypeScript, Vite, React Router, TanStack Query, Zod.
+- **Backend/API:** No permanently running standalone Node API. Standard reads use Supabase RLS-protected APIs. Trusted mutations, publish workflows, and later privileged operations use version-controlled PostgreSQL RPCs and, only where appropriate, Supabase Edge Functions.
+- **Data:** Supabase PostgreSQL is the sole authoritative source of truth. Supabase also provides Auth and Storage.
+- **Deployment:** Static frontend on Cloudflare Pages; separate Supabase `dev` and `live` projects. Package 00 has no live deployment; the first live release is Package 00C.
 
-**Supabase/PostgreSQL hedefi kullanıcı kararıdır.** Bu kayıt, onay verilen hedefe göre teknik seçimi belgeler; otomatik teknoloji mirası değildir.
+**Supabase/PostgreSQL is a user-selected target.** React/Vite was independently evaluated and is not inherited automatically from the legacy React reference.
 
-## Neden bu seçim
+## Why this stack
 
-React/Vite, eski React/Vite referansından devralınmış değildir. Bağımsız değerlendirme sonucunda seçilmiştir: SSR gereksinimi olmayan, tablo/ağır okunabilir veri yüzeyleri olan bir SPA için hızlı derleme, yalın çalışma zamanı ve güçlü TypeScript ekosistemi sağlar. Supabase PostgreSQL ise RLS, migration, Auth, Storage ve yayınlanmış verinin cihazlar arası tutarlılığı için tek yönetilen tabanda çözüm sunar.
+React/Vite fits an SPA with dense tables and read-heavy operational screens without introducing an unnecessary SSR/server runtime. TypeScript tooling is mature and the build/runtime surface stays small. Supabase PostgreSQL provides RLS, migrations, Auth, Storage, and cross-device consistency in one managed data platform.
 
-Tarayıcı sadece publishable key kullanır. `service_role` ve diğer gizli anahtarlar tarayıcıya girmez. Browser cache resmî veri değildir; published data ve metrikler PostgreSQL’den gelir.
+The browser receives only a publishable key. `service_role` and other privileged secrets never enter client bundles. Browser cache is never authoritative; published data and metrics come from PostgreSQL.
 
-## Anlamlı alternatifler
+## Alternatives considered
 
-| Alternatif | Avantaj | Dezavantaj / neden seçilmedi |
+| Alternative | Advantage | Why not selected |
 |---|---|---|
-| Next.js + SSR + route handlers | SSR, tek framework içinde server route imkânı | Bu aşamada SSR ihtiyacı yok; server runtime, deploy ve secret yönetimi karmaşıklığını artırır. |
-| React SPA + ayrı Node/NestJS API + yönetilen PostgreSQL | Tam backend kontrolü, kurum içi standartlara uyum | Auth, RLS eşdeğeri, Storage, migration ve hosting için ek bileşen/operasyon gerekir; free-tier maliyet ve bakım yüzeyi büyür. |
-| Cloudflare Workers + D1 | Edge yakınlığı ve basit küçük API’ler | PostgreSQL uyumluluğu, transactional finansal/integrity gereksinimleri ve gelecekteki bulk data işleri için uygun ana kaynak değildir. |
-| Supabase + React/Vite (seçilen) | PostgreSQL, RLS, Auth, Storage, local CLI ve düşük operasyon | Sağlayıcı limitleri izlenmeli; free plan inactivity/pause ve backup sınırlamaları runbook ile yönetilmelidir. |
+| Next.js + SSR + route handlers | SSR and server routes in one framework | No current SSR need; increases runtime/deployment/secret complexity. |
+| React SPA + Node/NestJS API + managed PostgreSQL | Maximum backend control | Adds auth, storage, policy-equivalent enforcement, hosting, and operational cost. |
+| Cloudflare Workers + D1 | Simple edge APIs | Poorer fit for PostgreSQL compatibility, transactional finance/integrity, and later bulk workloads. |
+| **Supabase + React/Vite** | PostgreSQL, RLS, Auth, Storage, local CLI, low operations | Provider limits, inactivity, and backup constraints require explicit runbooks. |
 
-## Geliştirme karmaşıklığı ve yüksek hacimli import etkisi
+## High-volume import boundary
 
-Paket 00 import motoru kodlamaz. **10K/25K/50K XLSX parse işlemi varsayılan olarak Supabase Edge Function içinde yapılmayacaktır.** Paket 01’in canonical yönü şudur: **Browser Web Worker parse → chunk/bulk staging → PostgreSQL RPC/set-based validation/reconciliation → candidate publication → atomic publish.** Edge Functions yalnız gerektiğinde güvenilir server-side orchestration/security boundary olarak kullanılabilir; uzun XLSX parsing ve satır-başı işlem Edge Function’a taşınamaz. Satır başına HTTP çağrısı, satır başına transaction veya tarayıcıda on binlerce DOM satırı yasaktır. Bu stack Web Worker, Storage evidence, SQL bulk/RPC, keyset pagination ve aggregate read model yaklaşımını destekler.
+Package 00 does not implement imports. Package 01 must use this canonical direction for 10K/25K/50K XLSX workloads:
 
-## Free-tier ve deploy etkisi
+**Browser Web Worker parse → chunk/bulk staging → PostgreSQL RPC/set-based validation and reconciliation → candidate publication → atomic publish**
 
-Frontend’in statik hosting’e ayrılması uygulama sunucusu maliyetini azaltır. Supabase Free kapasitesi veri kopyalarının azaltılmasını, raw Excel’in Storage’da tutulmasını ve database/storage/egress kullanımının izlenmesini gerektirir. Free limitleri iş mantığına hardcode edilmez; yalnız planlama, System Health eşikleri ve deployment-time kontrol girdisidir.
+Hard constraints:
 
-Detaylı güncel baseline: [FREE_TIER_BASELINE.md](FREE_TIER_BASELINE.md).
+- Do not perform long XLSX parsing inside Edge Functions by default.
+- Edge Functions may provide trusted orchestration/security boundaries, not row-by-row XLSX processing.
+- No per-row HTTP calls or per-row transactions.
+- Do not render tens of thousands of browser DOM rows; use aggregate reads and paginated/keyset drill-downs.
+- The stack must support Web Workers, Storage evidence, SQL bulk/RPC operations, keyset pagination, and aggregate read models.
 
-## Kullanıcı teknik onayı
+## Free-tier impact
 
-**KULLANICI TEKNİK ONAYI: BEKLİYOR**
+Static frontend hosting avoids a dedicated application-server cost. Supabase Free capacity requires careful control of database copies, Storage evidence, and egress. Provider limits are **not** business logic; they are planning, System Health, and deployment-time validation inputs.
 
-Bu karar, kullanıcı açıkça onaylamadan `APPROVED` durumuna geçirilmez.
+See [`FREE_TIER_BASELINE.md`](FREE_TIER_BASELINE.md).
+
+## User technical approval
+
+**USER TECHNICAL APPROVAL: APPROVED**
+
+Approved explicitly by the user before Package 00 closure.

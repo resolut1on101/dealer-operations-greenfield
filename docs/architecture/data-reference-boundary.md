@@ -1,27 +1,30 @@
-# Dış Veri Referans Sınırı
+# External Data Reference Boundary
 
-**Durum:** Paket 00 dokümantasyon kaydı. Bu belge import motoru veya veri modeli tanımlamaz.
+**Status:** Package 00 documentation only. This document does not define an import engine or data model.
 
-Paket 01 için dış, READ-ONLY veri referansı aşağıdaki repo-dışı Windows yoludur:
+External read-only data reference for future Package 01 work:
 
 `C:\Users\monds\Desktop\YENI\VERI_REFERANS`
 
-Bu yol uygulama repository’sinin parçası değildir. Uygulama reposuna kopyalanmaz; gerçek Excel dosyaları Git’e eklenmez; hiçbir gerçek dosya değiştirilmez, yeniden kaydedilmez veya normalize edilmiş haliyle kaynağın üzerine yazılmaz.
+This path is outside the application repository. Never copy real Excel files into Git; never modify, re-save, normalize, or overwrite the originals.
 
-## Klasör sözleşmesi
+## Folder contract
 
-| Klasör | İzin verilen amaç |
+| Folder | Allowed purpose |
 |---|---|
-| `00_ORIJINAL_EXCEL_READONLY` | Gerçek Excel kaynakları; yalnız salt-okunur inceleme/karakterizasyon. |
-| `01_ANONIM_TEST_ORNEKLERI` | Yalnız anonim veya sentetik küçük fixture. |
-| `02_BUYUK_YUK_TESTLERI` | Paket 01 sırasında üretilecek sentetik 10K/25K/50K yük test Excel’leri. |
-| `03_EDGE_CASE_FIXTURES` | Kontrollü hata ve sınır senaryoları. |
-| `04_KONTROL_TOPLAMLARI` | Kaynak SHA256, sheet, satır/kolon sayısı ve exact kontrol toplamı manifestleri. |
+| `00_ORIJINAL_EXCEL_READONLY` | Real Excel sources; read-only inspection/characterization only. |
+| `01_ANONIM_TEST_ORNEKLERI` | Small anonymized or synthetic fixtures only. |
+| `02_BUYUK_YUK_TESTLERI` | Synthetic 10K/25K/50K load-test workbooks created during Package 01. |
+| `03_EDGE_CASE_FIXTURES` | Controlled error and boundary-condition fixtures. |
+| `04_KONTROL_TOPLAMLARI` | Validation manifests: source SHA256, sheet, row/column counts, and exact control totals. |
 
-`04_KONTROL_TOPLAMLARI` yalnız doğrulama manifestidir; gerçek kaynak içeriği veya business data kopyası değildir.
+`04_KONTROL_TOPLAMLARI` stores validation evidence only, never copied real business data.
 
-## Gelecek Paket 01 sınırı
+## Future Package 01 rules
 
-Kaynak dosya adı hiçbir iş kuralı değildir. Kaynak türü yalnız sheet, kolonlar ve version-controlled source-contract üzerinden belirlenecektir. Paket 01, bu dış referansı kullanabilir; ancak bu Paket 00 kaydı import motoru, parser, database import tablosu, source-contract ya da test Excel üretimi oluşturmaz.
+- A filename is never a business rule.
+- Identify a source type from sheet structure, columns, and a version-controlled source contract.
+- Real Excel files are evidence/reference inputs, not the official `local`, `dev`, or `live` source of truth.
+- Official business data exists only after a future validated Package 01 import/publish flow writes and publishes it in Supabase PostgreSQL.
 
-Gerçek Excel dosyaları local/dev/live resmî business data kaynağı değildir. Resmî business data, ancak ileride Package 01’in doğrulanmış import/publish akışı sonunda Supabase PostgreSQL’de oluşacaktır.
+This Package 00 record does **not** authorize early implementation of parsers, import tables, source contracts, or test workbook generation.
