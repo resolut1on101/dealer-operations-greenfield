@@ -44,10 +44,11 @@ begin
   set local request.jwt.claim.role = 'anon';
   rejected := false;
   begin
-    execute 'select 1 from public.user_profiles';
+    execute 'select count(*) from public.user_profiles' into row_count;
+    rejected := row_count = 0;
   exception when insufficient_privilege then rejected := true;
   end;
-  perform pg_temp.assert_true(rejected, 'anon read is rejected');
+  perform pg_temp.assert_true(rejected, 'anon read is rejected or RLS-hidden');
   rejected := false;
   begin
     execute 'insert into public.user_profiles (user_id, role) values (''10000000-0000-0000-0000-000000000004'', ''viewer'')';

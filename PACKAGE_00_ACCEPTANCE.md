@@ -17,6 +17,8 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 
 `local` ve `dev` yalnız synthetic/test data; `live` yalnız published business data içindir. Paket 00’da gerçek müşteri, sellout veya finans verisi seed edilmedi. `local` Docker instance’tır; ayrı `dev` ve `live` hosted Supabase proje/secret’leri gerekir. İlk live deploy Paket 00C’dedir.
 
+**DEV doğrulaması:** explicit project ref `enlcfbbkfqijspxhngzo` linklendi. `db push --linked` ile üç Package 00 migration uygulandı; remote schema sorgusu 3 migration, `admin,viewer`, `authenticated_read,admin_write` ve iki bootstrap fonksiyonu döndürdü. `db query --linked --file supabase/tests/rls-foundation.sql` synthetic test kullanıcılarıyla çalıştı ve transaction sonunda rollback yaptı. LIVE’a bağlantı veya deploy yapılmadı.
+
 ## Rol, RLS ve admin bootstrap
 
 - Contract/migration yalnız `admin` ve `viewer` rollerini tanımlar; capability, scope veya permission matrisi yoktur.
@@ -48,14 +50,15 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 | `npm run verify` | 0 | PASS |
 | `npm run supabase -- db reset --local` | 0 | PASS — 3 migration uygulandı |
 | `npm run test:rls` | 0 | PASS — transaction rollback ile RLS/bootstrap entegrasyon testi |
+| `npm run supabase -- db query --linked --file supabase/tests/rls-foundation.sql` | 0 | PASS — DEV üzerinde synthetic/rollback RLS testi |
 
 ## Git ve CI
 
 - Foundation commit: `7465796302ce66db01f873c6392369f12327c7f5`
 - Önceki kabul kaydı commit: `a5d4e3c127cca58b87407f144877b3ca6806b9a4`
 - Bu güncellemenin kapanış SHA’sı commit oluşturulduktan sonra dış kapanış mesajında verilir; belge kendi commit hash’ini içeremez.
-- Git remote yoktur: `REMOTE: USER DECISION REQUIRED`.
-- `.github/workflows/ci.yml` quality ve migration-check (reset + `test:rls`) tanımlar; remote/push olmadığından GitHub Actions çalıştırılmadı. **CI: FAIL (CONFIGURED_BUT_NOT_RUN; gerçek CI PASS değildir).**
+- Remote: `origin https://github.com/resolut1on101/dealer-operations-greenfield.git`; `main` push edildi.
+- GitHub Actions [CI run #1](https://github.com/resolut1on101/dealer-operations-greenfield/actions/runs/31305308577): `quality = success`, `migration-check = success`. **CI: PASS.**
 
 ## Review bundle güvenliği
 
@@ -67,5 +70,3 @@ Seçilen stack ve alternatif değerlendirmesi [TECH_STACK_DECISION.md](TECH_STAC
 ## Açık bloklayıcılar
 
 1. Kullanıcının teknik stack onayı.
-2. Kullanıcının seçtiği Git remote, `main` push ve gerçek GitHub Actions quality/migration-check PASS kanıtı.
-3. Kullanıcının sağlayacağı ayrı Supabase `dev` proje ref/bağlantısı: explicit target link, migration listesi ve RLS foundation doğrulaması. Live’a deploy edilmeyecektir.
