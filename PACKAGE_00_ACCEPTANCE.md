@@ -51,7 +51,7 @@ Local ve dev yalnız synthetic/test data, live ise published business data için
 - GitHub Actions workflow: `.github/workflows/ci.yml`
 - CI durumu: `CONFIGURED_BUT_NOT_RUN` — remote/push yoktur.
 - Remote: `USER DECISION REQUIRED`
-- Foundation commit SHA: `PENDING_INITIAL_COMMIT`
+- Foundation commit SHA: `7465796302ce66db01f873c6392369f12327c7f5`
 - Kapanış commit SHA: dış kapanış raporunda verilecektir; commit kendi hash’ini içeremeyeceği için bu belge ilk foundation commit SHA’sını kaydeder.
 
 ## Açık bloklayıcılar
