@@ -25,6 +25,19 @@ begin
 
   update public.user_profiles set role = 'admin' where user_id = admin_id;
 
+  perform pg_temp.assert_true(
+    public.canonical_control_totals('{"amount":151185.58999999994}'::jsonb, '{"amount":2}'::jsonb) = '{"amount":151185.59}'::jsonb,
+    'decimal control totals canonicalize to the contract scale'
+  );
+  perform pg_temp.assert_true(
+    public.canonical_control_totals('{"amount":151185.58}'::jsonb, '{"amount":2}'::jsonb) <> '{"amount":151185.59}'::jsonb,
+    'material decimal differences remain mismatched'
+  );
+  perform pg_temp.assert_true(
+    public.canonical_control_totals('{"count":2}'::jsonb, '{"count":0}'::jsonb) <> '{"count":1}'::jsonb,
+    'integer differences remain mismatched'
+  );
+
   set local role service_role;
   set local request.jwt.claim.role = 'service_role';
   reset role;
@@ -33,9 +46,9 @@ begin
   perform set_config('request.jwt.claim.sub', admin_id::text, true);
   contract_id := public.register_source_contract(
     'SYNTHETIC_IMPORT', '1', 'Data', '["id","amount"]'::jsonb, '["id","amount"]'::jsonb,
-    '{"amount":"amount"}'::jsonb, 'FULL_REPLACE'::public.publication_mode
+    '{"amount":"amount"}'::jsonb, '{"amount":2}'::jsonb, 'FULL_REPLACE'::public.publication_mode
   );
-  batch_one := (public.create_import_batch(contract_id, '2026-08', 'Data', '["id","amount"]', repeat('a', 64), 123, 2, 2, '{"amount":15.75}')).id;
+  batch_one := (public.create_import_batch(contract_id, '2026-08', 'Data', '["id","amount"]', repeat('a', 64), 123, 2, 2, '{"amount":15.7500000001}')).id;
   perform pg_temp.assert_true((select storage_object_path = 'imports/' || id::text || '/source.xlsx' from public.import_batches where id = batch_one), 'AUD-04 server generates the storage path from batch identity');
   insert into storage.objects (bucket_id, name, owner, owner_id, metadata)
   select storage_bucket, storage_object_path, admin_id, admin_id::text, '{}'::jsonb from public.import_batches where id = batch_one;
@@ -76,6 +89,7 @@ begin
   retry_reconciliation_id := public.reconcile_import_batch(batch_one);
   perform pg_temp.assert_true(reconciliation_id = retry_reconciliation_id, 'AUD-02 reconciliation retry returns the existing result without an FK failure');
   perform pg_temp.assert_true((select status = 'MATCHED' from public.import_reconciliations where id = reconciliation_id), 'exact row and amount reconciliation passes');
+  perform pg_temp.assert_true((select expected_control_totals = '{"amount":15.75}'::jsonb and actual_control_totals = '{"amount":15.75}'::jsonb from public.import_reconciliations where id = reconciliation_id), 'reconciliation stores canonical expected and actual totals');
   candidate_one := public.create_candidate_publication(batch_one, '{"test":"first"}');
   publication_one := public.publish_candidate(candidate_one, null);
   perform pg_temp.assert_true((select active_publication_id = publication_one from public.publication_heads where source_kind = 'SYNTHETIC_IMPORT' and scope_key = '2026-08'), 'first publication becomes active');
@@ -102,6 +116,10 @@ begin
   perform public.stage_import_chunk(batch_bad, 0, 0, public.import_chunk_payload_hash('[{"id":"4","amount":"20"}]'), 1, '[{"id":"4","amount":"20"}]');
   perform public.validate_import_batch(batch_bad); perform public.reconcile_import_batch(batch_bad);
   perform pg_temp.assert_true((select status = 'FAILED' from public.import_batches where id = batch_bad), 'control-total difference blocks candidate publication');
+  rejected := false;
+  begin perform public.create_candidate_publication(batch_bad, '{"test":"blocked"}'); exception when others then rejected := true; end;
+  perform pg_temp.assert_true(rejected, 'failed reconciliation cannot create a candidate publication');
+  perform pg_temp.assert_true((select active_publication_id = publication_two from public.publication_heads where source_kind = 'SYNTHETIC_IMPORT' and scope_key = '2026-08'), 'failed candidate creation preserves the previous active publication');
 
   rejected := false;
   begin perform public.register_source_contract('SYNTHETIC_IMPORT', '1', 'Changed', '["id"]'::jsonb, '["id"]'::jsonb, '{}'::jsonb, 'FULL_REPLACE'::public.publication_mode); exception when unique_violation then rejected := true; end;

@@ -59,7 +59,7 @@ try {
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values ('${adminId}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'package01-concurrency@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now());
     update public.user_profiles set role = 'admin' where user_id = '${adminId}';`)
-  const contractId = asAdmin(`select public.register_source_contract('SYNTHETIC_CONCURRENT', '1', 'Data', '["id","amount"]'::jsonb, '["id","amount"]'::jsonb, '{"amount":"amount"}'::jsonb, 'FULL_REPLACE'::public.publication_mode)`)
+  const contractId = asAdmin(`select public.register_source_contract('SYNTHETIC_CONCURRENT', '1', 'Data', '["id","amount"]'::jsonb, '["id","amount"]'::jsonb, '{"amount":"amount"}'::jsonb, '{"amount":0}'::jsonb, 'FULL_REPLACE'::public.publication_mode)`)
   const firstCandidate = await createCandidate(contractId, 'a'.repeat(64), 10)
   const secondCandidate = await createCandidate(contractId, 'b'.repeat(64), 20)
   const first = session(`begin; set local role authenticated; set local request.jwt.claim.role = 'authenticated'; set local request.jwt.claim.sub = '${adminId}'; select pg_advisory_xact_lock(hashtextextended('package01:SYNTHETIC_CONCURRENT:concurrent-scope', 0)); select pg_sleep(1); select public.publish_candidate('${firstCandidate}', null); commit;`)

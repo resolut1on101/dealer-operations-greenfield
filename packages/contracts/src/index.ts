@@ -37,6 +37,7 @@ export const sourceContractSignatureSchema = z.object({
   requiredHeaders: z.array(z.string().min(1)),
   requiredFields: z.array(z.string().min(1)),
   controlTotalFields: z.record(z.string(), z.string()),
+  controlTotalScales: z.record(z.string(), z.number().int().min(0).max(18)),
   publicationMode: importPublicationModeSchema,
 })
 export type SourceContractSignature = z.infer<typeof sourceContractSignatureSchema>

@@ -174,6 +174,7 @@ const started = new Date().toISOString()
 const headers = parsed.headers
 const requiredFields = JSON.parse(process.env.PACKAGE01_LIVE_REQUIRED_FIELDS ?? JSON.stringify(headers))
 const controlFields = JSON.parse(process.env.PACKAGE01_LIVE_CONTROL_TOTAL_FIELDS ?? JSON.stringify(Object.fromEntries(Object.keys(manifest.numeric_sums).map((name) => [name, name]))))
+const controlScales = JSON.parse(process.env.PACKAGE01_LIVE_CONTROL_TOTAL_SCALES ?? JSON.stringify(Object.fromEntries(Object.keys(controlFields).map((name) => [name, /lt/i.test(name) ? 2 : 0]))))
 async function retry(label, operation) {
   let lastError
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -184,7 +185,7 @@ async function retry(label, operation) {
   }
   fail(`${label} failed after 3 attempts: ${lastError?.message ?? 'unknown error'}`)
 }
-const contract = await retry('register_source_contract', () => client.rpc('register_source_contract', { p_source_kind: 'TICARI_STOK', p_version: process.env.PACKAGE01_LIVE_CONTRACT_VERSION ?? 'UAT-20260809-10K', p_required_sheet: manifest.sheet_names[0], p_required_headers: headers, p_required_fields: requiredFields, p_control_total_fields: controlFields, p_publication_mode: 'FULL_REPLACE' }))
+const contract = await retry('register_source_contract', () => client.rpc('register_source_contract', { p_source_kind: 'TICARI_STOK', p_version: process.env.PACKAGE01_LIVE_CONTRACT_VERSION ?? 'UAT-20260809-10K', p_required_sheet: manifest.sheet_names[0], p_required_headers: headers, p_required_fields: requiredFields, p_control_total_fields: controlFields, p_control_total_scales: controlScales, p_publication_mode: 'FULL_REPLACE' }))
 if (contract.error) fail(contract.error.message)
 const scope = process.env.PACKAGE01_LIVE_SCOPE ?? (invalidRequiredField ? 'uat-package-01-ticari-stok-10k-interrupt-01' : 'uat-package-01-ticari-stok-10k')
 const expectedUat08ActivePublicationId = '7e029c85-976b-4358-a159-0f7f234d5689'

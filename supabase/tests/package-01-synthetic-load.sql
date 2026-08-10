@@ -13,7 +13,7 @@ begin
   values (admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'package01-load@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now());
   update public.user_profiles set role = 'admin' where user_id = admin_id;
   set local role authenticated; set local request.jwt.claim.role = 'authenticated'; perform set_config('request.jwt.claim.sub', admin_id::text, true);
-  contract_id := public.register_source_contract('SYNTHETIC_LOAD', '1', 'Data', '["id","amount"]'::jsonb, '["id","amount"]'::jsonb, '{"amount":"amount"}'::jsonb, 'FULL_REPLACE'::public.publication_mode);
+  contract_id := public.register_source_contract('SYNTHETIC_LOAD', '1', 'Data', '["id","amount"]'::jsonb, '["id","amount"]'::jsonb, '{"amount":"amount"}'::jsonb, '{"amount":0}'::jsonb, 'FULL_REPLACE'::public.publication_mode);
 
   foreach total in array array[2500, 10000, 25000, 50000] loop
     chunk_count := ceil(total::numeric / 1000)::integer;

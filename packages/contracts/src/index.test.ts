@@ -27,7 +27,7 @@ describe('Package 01 import transport contracts', () => {
     expect(sourceContractSignatureSchema.parse({
       sourceKind: 'CUSTOMER_MASTER', version: '1', requiredSheet: 'Data',
       requiredHeaders: ['Customer Code'], requiredFields: ['Customer Code'],
-      controlTotalFields: {}, publicationMode: 'FULL_REPLACE',
+      controlTotalFields: {}, controlTotalScales: {}, publicationMode: 'FULL_REPLACE',
     }).sourceKind).toBe('CUSTOMER_MASTER')
   })
 })

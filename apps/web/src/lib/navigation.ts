@@ -2,7 +2,8 @@ import type { ApplicationRole } from '@dealer-operations/contracts'
 
 export type NavGroup = { label: string; items: string[] }
 
-const mutationOnlyItems = new Set(['Veri Yükleme', 'Ayarlar'])
+const mutationOnlyItems = new Set(['Ayarlar'])
+const unauthenticatedOnlyItems = new Set(['Veri Yükleme', 'Ayarlar'])
 
 const navGroups: NavGroup[] = [
   { label: 'GENEL', items: ['Genel Bakış'] },
@@ -16,7 +17,8 @@ const navGroups: NavGroup[] = [
 
 export function getVisibleNavGroups(role: ApplicationRole | null): NavGroup[] {
   if (role === 'admin') return navGroups
+  const hiddenItems = role === null ? unauthenticatedOnlyItems : mutationOnlyItems
   return navGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !mutationOnlyItems.has(item)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => !hiddenItems.has(item)) }))
     .filter((group) => group.items.length > 0)
 }
