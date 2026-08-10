@@ -20,6 +20,7 @@
     "test:import": "node scripts/test-package-01-import.mjs",
     "test:import:load": "node scripts/test-package-01-load.mjs",
     "test:import:concurrency": "node scripts/test-package-01-publication-concurrency.mjs",
+    "test:customer-domain": "node scripts/test-package-02-customer-domain.mjs",
     "backup:logical": "node scripts/backup-logical.mjs",
     "restore:rehearsal": "node scripts/restore-rehearsal.mjs",
     "deploy:live": "node scripts/deploy-live.mjs",

@@ -9,7 +9,25 @@ export type ApplicationRole = z.infer<typeof applicationRoleSchema>
 export const releaseStateSchema = z.enum(['LIVE_TESTING', 'VERIFIED', 'BLOCKED'])
 export type ReleaseState = z.infer<typeof releaseStateSchema>
 
-export const packageIdentifierSchema = z.enum(['00C', '01'])
+export const packageIdentifierSchema = z.enum(['00C', '01', '02'])
+
+export const customerStatusSchema = z.enum(['ACTIVE', 'PASSIVE', 'CANCELLED', 'UNKNOWN'])
+export type CustomerStatus = z.infer<typeof customerStatusSchema>
+export const customerChannelSchema = z.enum(['OPEN', 'CLOSED', 'UNCLASSIFIED'])
+export type CustomerChannel = z.infer<typeof customerChannelSchema>
+export const customerMasterRowSchema = z.object({
+  source_row_no: z.number().int().positive(),
+  customer_id: z.string().regex(/^500[0-9]+$/),
+  customer_name: z.string().nullable().optional(),
+  trade_name: z.string().nullable().optional(),
+  raw_status: z.string().nullable().optional(),
+  raw_channel: z.string().nullable().optional(),
+  segment: z.string().nullable().optional(),
+  raw_representative: z.string().nullable().optional(),
+  raw_ssm: z.string().nullable().optional(),
+  raw_payload: z.record(z.string(), z.unknown()),
+})
+export type CustomerMasterRow = z.infer<typeof customerMasterRowSchema>
 
 // Package 01 is intentionally domain-neutral. Domain packages supply contract instances,
 // parsers and canonical adapters without replacing this transport/publication contract.

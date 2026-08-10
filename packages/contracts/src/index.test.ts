@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { applicationRoleSchema, importChunkSchema, sourceContractSignatureSchema } from './index'
+import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, sourceContractSignatureSchema } from './index'
 
 describe('application role contract', () => {
   it('permits only admin and viewer', () => {
     expect(applicationRoleSchema.parse('admin')).toBe('admin')
     expect(applicationRoleSchema.parse('viewer')).toBe('viewer')
     expect(() => applicationRoleSchema.parse('editor')).toThrow()
+  })
+})
+
+describe('Package 02 customer contracts', () => {
+  it('preserves exact 500-prefixed customer text identifiers', () => {
+    expect(customerMasterRowSchema.parse({ source_row_no: 1, customer_id: '500001', raw_payload: {} }).customer_id).toBe('500001')
+    expect(() => customerMasterRowSchema.parse({ source_row_no: 1, customer_id: '5001.0', raw_payload: {} })).toThrow()
+  })
+
+  it('keeps the approved status vocabulary', () => {
+    expect(customerStatusSchema.parse('ACTIVE')).toBe('ACTIVE')
+    expect(() => customerStatusSchema.parse('DELETED')).toThrow()
   })
 })
 
