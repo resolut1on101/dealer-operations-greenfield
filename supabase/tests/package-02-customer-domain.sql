@@ -21,10 +21,25 @@ begin
          (v_viewer_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'p02-source-viewer@example.test', 'x', now(), '{}', '{}', now(), now());
   update public.user_profiles set role='admin' where user_id=v_admin_id;
   set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
-  v_contract_id := public.register_source_contract('CUSTOMER_MASTER', '2', 'Müşteri',
-    '["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb,
-    '["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb,
-    '{}'::jsonb, 'FULL_REPLACE'::public.publication_mode);
+  select id into v_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='2';
+  perform pg_temp.assert_true(
+    v_contract_id is not null and exists (
+      select 1 from public.source_contract_versions
+      where id=v_contract_id
+        and source_kind='CUSTOMER_MASTER'
+        and version='2'
+        and required_sheet='Müşteri'
+        and required_headers='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
+        and required_fields='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
+        and control_total_fields='{}'::jsonb
+        and control_total_scales='{}'::jsonb
+        and publication_mode='FULL_REPLACE'::public.publication_mode
+        and is_active
+        and retired_at is null
+        and created_by is null
+    ),
+    'migration-provided CUSTOMER_MASTER contract is canonical and active'
+  );
   reset role;
   insert into public.import_batches(id, source_contract_version_id, source_kind, scope_key, source_sheet, source_headers, storage_object_path, declared_file_hash, file_size_bytes, expected_rows, expected_chunks, created_by)
   values (v_batch_id, v_contract_id, 'CUSTOMER_MASTER', 'master', 'Müşteri', '[]', 'imports/'||v_batch_id||'/source.xlsx', repeat('a',64), 1, 1, 1, v_admin_id);
