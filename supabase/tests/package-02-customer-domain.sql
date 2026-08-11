@@ -6,7 +6,7 @@ returns void language plpgsql as $$ begin if not condition then raise exception 
 
 do $$
 declare
-  v_admin_id uuid := gen_random_uuid(); v_viewer_id uuid := gen_random_uuid(); v_contract_id uuid;
+  v_admin_id uuid := gen_random_uuid(); v_viewer_id uuid := gen_random_uuid(); v_contract_id uuid; v_v2_contract_id uuid;
   v_batch_id uuid := gen_random_uuid(); v_batch_two_id uuid := gen_random_uuid();
   v_validation_id uuid := gen_random_uuid(); v_reconciliation_id uuid := gen_random_uuid(); v_candidate_id uuid := gen_random_uuid(); v_publication_id uuid := gen_random_uuid();
   v_validation_two_id uuid := gen_random_uuid(); v_reconciliation_two_id uuid := gen_random_uuid(); v_candidate_two_id uuid := gen_random_uuid(); v_publication_two_id uuid := gen_random_uuid();
@@ -21,14 +21,38 @@ begin
          (v_viewer_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'p02-source-viewer@example.test', 'x', now(), '{}', '{}', now(), now());
   update public.user_profiles set role='admin' where user_id=v_admin_id;
   set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
-  select id into v_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='2';
+  select id into v_v2_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='2';
   perform pg_temp.assert_true(
-    v_contract_id is not null and exists (
+    v_v2_contract_id is not null and exists (
       select 1 from public.source_contract_versions
-      where id=v_contract_id
+      where id=v_v2_contract_id
         and source_kind='CUSTOMER_MASTER'
         and version='2'
         and required_sheet='Müşteri'
+        and required_headers='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
+        and required_fields='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
+        and control_total_fields='{}'::jsonb
+        and control_total_scales='{}'::jsonb
+        and publication_mode='FULL_REPLACE'::public.publication_mode
+        and not is_active
+        and retired_at is not null
+    ),
+    'known-invalid CUSTOMER_MASTER version 2 is retired'
+  );
+  perform pg_temp.assert_true(
+    not exists (select 1 from public.import_batches where source_contract_version_id=v_v2_contract_id),
+    'retired CUSTOMER_MASTER version 2 has no import batch references'
+  );
+  select id into v_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='3';
+  perform pg_temp.assert_true(
+    v_contract_id is not null
+    and (select count(*)=1 from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='3')
+    and exists (
+      select 1 from public.source_contract_versions
+      where id=v_contract_id
+        and source_kind='CUSTOMER_MASTER'
+        and version='3'
+        and required_sheet='SAPUI5 dışa aktarımı'
         and required_headers='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
         and required_fields='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
         and control_total_fields='{}'::jsonb
@@ -38,11 +62,11 @@ begin
         and retired_at is null
         and created_by is null
     ),
-    'migration-provided CUSTOMER_MASTER contract is canonical and active'
+    'migration-provided CUSTOMER_MASTER version 3 is canonical and active'
   );
   reset role;
   insert into public.import_batches(id, source_contract_version_id, source_kind, scope_key, source_sheet, source_headers, storage_object_path, declared_file_hash, file_size_bytes, expected_rows, expected_chunks, created_by)
-  values (v_batch_id, v_contract_id, 'CUSTOMER_MASTER', 'master', 'Müşteri', '[]', 'imports/'||v_batch_id||'/source.xlsx', repeat('a',64), 1, 1, 1, v_admin_id);
+  values (v_batch_id, v_contract_id, 'CUSTOMER_MASTER', 'master', 'SAPUI5 dışa aktarımı', '[]', 'imports/'||v_batch_id||'/source.xlsx', repeat('a',64), 1, 1, 1, v_admin_id);
   set local role authenticated; begin perform public.create_customer_master_snapshot(v_batch_id, 'unpublished'); exception when others then v_rejected := true; end; reset role;
   perform pg_temp.assert_true(v_rejected, 'unpublished Package 01 batch cannot create a Package 02 snapshot');
 
@@ -58,12 +82,12 @@ begin
   update public.import_batches set source_verified_at='2026-08-01T10:00:00Z'::timestamptz where id=v_batch_id;
 
   insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at,status,validation_run_id,reconciliation_id,published_publication_id)
-  values (v_bad_batch_id,v_contract_id,'CUSTOMER_MASTER','master','Müşteri','[]','imports/'||v_bad_batch_id||'/source.xlsx',repeat('c',64),1,1,1,v_admin_id,now(),'PUBLISHED',v_validation_id,v_reconciliation_id,v_publication_id);
+  values (v_bad_batch_id,v_contract_id,'CUSTOMER_MASTER','master','SAPUI5 dışa aktarımı','[]','imports/'||v_bad_batch_id||'/source.xlsx',repeat('c',64),1,1,1,v_admin_id,now(),'PUBLISHED',v_validation_id,v_reconciliation_id,v_publication_id);
   v_rejected := false; set local role authenticated; begin perform public.create_customer_master_snapshot(v_bad_batch_id, 'wrong-candidate-batch'); exception when others then v_rejected := true; end; reset role;
   perform pg_temp.assert_true(v_rejected, 'candidate from another batch cannot create a Package 02 snapshot');
 
   insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at,status)
-  values (v_bad_validation_batch_id,v_contract_id,'CUSTOMER_MASTER','master','Müşteri','[]','imports/'||v_bad_validation_batch_id||'/source.xlsx',repeat('d',64),1,1,1,v_admin_id,now(),'PUBLISHED');
+  values (v_bad_validation_batch_id,v_contract_id,'CUSTOMER_MASTER','master','SAPUI5 dışa aktarımı','[]','imports/'||v_bad_validation_batch_id||'/source.xlsx',repeat('d',64),1,1,1,v_admin_id,now(),'PUBLISHED');
   insert into public.import_reconciliations(id,batch_id,parsed_rows,valid_rows,excluded_rows,blocked_rows,duplicate_rows,expected_control_totals,actual_control_totals,status) values (v_bad_reconciliation_id,v_bad_validation_batch_id,1,1,0,0,0,'{}','{}','MATCHED');
   insert into public.candidate_publications(id,batch_id,validation_run_id,reconciliation_id,manifest,created_by,status,published_at) values (v_bad_validation_candidate_id,v_bad_validation_batch_id,v_validation_id,v_bad_reconciliation_id,'{}',v_admin_id,'PUBLISHED',now());
   insert into public.publications(id,candidate_id,source_kind,scope_key,version,manifest,published_by) values (v_bad_validation_publication_id,v_bad_validation_candidate_id,'CUSTOMER_MASTER','master',3,'{}',v_admin_id);
@@ -72,7 +96,7 @@ begin
   perform pg_temp.assert_true(v_rejected, 'validation from another batch cannot create a Package 02 snapshot');
 
   insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at,status)
-  values (v_bad_reconciliation_batch_id,v_contract_id,'CUSTOMER_MASTER','master','Müşteri','[]','imports/'||v_bad_reconciliation_batch_id||'/source.xlsx',repeat('e',64),1,1,1,v_admin_id,now(),'PUBLISHED');
+  values (v_bad_reconciliation_batch_id,v_contract_id,'CUSTOMER_MASTER','master','SAPUI5 dışa aktarımı','[]','imports/'||v_bad_reconciliation_batch_id||'/source.xlsx',repeat('e',64),1,1,1,v_admin_id,now(),'PUBLISHED');
   insert into public.validation_runs(id,batch_id,contract_version_id,valid_rows,status) values (v_bad_reconciliation_validation_id,v_bad_reconciliation_batch_id,v_contract_id,1,'PASSED');
   insert into public.candidate_publications(id,batch_id,validation_run_id,reconciliation_id,manifest,created_by,status,published_at) values (v_bad_reconciliation_candidate_id,v_bad_reconciliation_batch_id,v_bad_reconciliation_validation_id,v_reconciliation_id,'{}',v_admin_id,'PUBLISHED',now());
   insert into public.publications(id,candidate_id,source_kind,scope_key,version,manifest,published_by) values (v_bad_reconciliation_publication_id,v_bad_reconciliation_candidate_id,'CUSTOMER_MASTER','master',4,'{}',v_admin_id);
@@ -159,7 +183,7 @@ begin
   reset role;
 
   insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at)
-  values (v_batch_two_id,v_contract_id,'CUSTOMER_MASTER','master','Müşteri','[]','imports/'||v_batch_two_id||'/source.xlsx',repeat('b',64),1,1,1,v_admin_id,'2026-08-02T10:00:00Z'::timestamptz);
+  values (v_batch_two_id,v_contract_id,'CUSTOMER_MASTER','master','SAPUI5 dışa aktarımı','[]','imports/'||v_batch_two_id||'/source.xlsx',repeat('b',64),1,1,1,v_admin_id,'2026-08-02T10:00:00Z'::timestamptz);
   insert into public.validation_runs(id,batch_id,contract_version_id,valid_rows,status) values (v_validation_two_id,v_batch_two_id,v_contract_id,1,'PASSED');
   insert into public.import_reconciliations(id,batch_id,parsed_rows,valid_rows,excluded_rows,blocked_rows,duplicate_rows,expected_control_totals,actual_control_totals,status) values (v_reconciliation_two_id,v_batch_two_id,1,1,0,0,0,'{}','{}','MATCHED');
   insert into public.candidate_publications(id,batch_id,validation_run_id,reconciliation_id,manifest,created_by,status,published_at) values (v_candidate_two_id,v_batch_two_id,v_validation_two_id,v_reconciliation_two_id,'{}',v_admin_id,'PUBLISHED',now());
