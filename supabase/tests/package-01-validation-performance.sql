@@ -34,6 +34,9 @@ declare
   mixed_batch_id uuid;
   mixed_validation_id uuid;
   mixed_reconciliation_id uuid;
+  control_batch_id uuid;
+  control_validation_id uuid;
+  control_contract_id uuid;
   rejected boolean;
 begin
   insert into auth.users (
@@ -145,6 +148,53 @@ begin
     rejected := true;
   end;
   perform pg_temp.assert_true(rejected, 'invalid/duplicate batch cannot create a candidate');
+
+  control_contract_id := public.register_source_contract(
+    'SYNTHETIC_VALIDATION_CONTROL',
+    '1',
+    'Data',
+    '["id","amount"]'::jsonb,
+    '["id","amount"]'::jsonb,
+    '{"amount_total":"amount"}'::jsonb,
+    '{"amount_total":0}'::jsonb,
+    'FULL_REPLACE'::public.publication_mode
+  );
+
+  control_batch_id := (
+    public.create_import_batch(
+      control_contract_id, 'validation-invalid-control', 'Data', '["id","amount"]'::jsonb,
+      repeat('c', 64), 3, 1, 1, jsonb_build_object('amount_total', 3)
+    )
+  ).id;
+  reset role;
+  set local role service_role;
+  set local request.jwt.claim.role = 'service_role';
+  perform public.verify_import_source_hash(control_batch_id, repeat('c', 64), 3);
+  reset role;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  rows := '[{"id":"2","amount":"not-a-number"}]'::jsonb;
+  perform public.stage_import_chunk(
+    control_batch_id, 0, 0, public.import_chunk_payload_hash(rows),
+    jsonb_array_length(rows), rows
+  );
+  control_validation_id := public.validate_import_batch(control_batch_id);
+  perform pg_temp.assert_true(
+    (select valid_rows = 0 and blocked_rows = 1 from public.validation_runs where id = control_validation_id),
+    'control-total-only blocker remains blocked without a required-field error'
+  );
+  perform pg_temp.assert_true(
+    exists (
+      select 1 from public.validation_issues
+      where validation_run_id = control_validation_id
+        and code = 'INVALID_CONTROL_TOTAL_FIELD'
+        and detail -> 'source_row_no' = '1'::jsonb
+        and detail -> 'missing_required_fields' = '[]'::jsonb
+        and detail -> 'invalid_control_total_fields' = '["amount"]'::jsonb
+    ),
+    'control-total blocker persists exact field detail'
+  );
 end;
 $$;
 

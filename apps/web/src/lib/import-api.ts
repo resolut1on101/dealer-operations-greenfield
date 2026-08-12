@@ -7,9 +7,56 @@ export type PublicationHead = { source_kind: string; scope_key: string; active_p
 export type SourceContract = SourceContractSignature & { id: string; is_active: boolean; retired_at: string | null }
 export type ImportBatch = { id: string; source_contract_version_id: string; source_kind: string; scope_key: string; source_sheet: string; source_headers: string[]; storage_bucket: string; storage_object_path: string; declared_file_hash: string; verified_file_hash: string | null; file_size_bytes: number; expected_rows: number; expected_chunks: number; received_chunks: number; staged_rows: number; expected_control_totals: Record<string, string | number>; status: ImportBatchStatus; source_verified_at: string | null; validation_run_id: string | null; reconciliation_id: string | null; published_publication_id: string | null; created_at: string; updated_at: string; completed_at: string | null }
 export type ValidationRun = { id: string; valid_rows: number; excluded_rows: number; blocked_rows: number; duplicate_rows: number; status: string }
+export type ValidationIssue = { id: number; staging_row_id: number | null; severity: string; code: string; detail: { source_row_no?: number; missing_required_fields?: string[]; invalid_control_total_fields?: string[] } }
 export type Reconciliation = { id: string; parsed_rows: number; valid_rows: number; excluded_rows: number; blocked_rows: number; duplicate_rows: number; expected_control_totals: Record<string, unknown>; actual_control_totals: Record<string, unknown>; status: 'MATCHED' | 'MISMATCHED' }
 export type Candidate = { id: string; batch_id: string; status: 'READY' | 'PUBLISHED' | 'SUPERSEDED' | 'FAILED'; manifest: Record<string, unknown>; created_at: string; published_at: string | null }
-export type BatchDetail = { batch: ImportBatch; contract: SourceContract | null; validation: ValidationRun | null; reconciliation: Reconciliation | null; candidate: Candidate | null }
+export type BatchDetail = { batch: ImportBatch; contract: SourceContract | null; validation: ValidationRun | null; issues: ValidationIssue[]; issueTotal: number; reconciliation: Reconciliation | null; candidate: Candidate | null }
+
+const VALIDATION_ISSUE_PAGE_SIZE = 500
+
+async function listValidationIssues(
+  api: ReturnType<typeof client>,
+  validationRunId: string,
+): Promise<{ issues: ValidationIssue[]; total: number }> {
+  const issues: ValidationIssue[] = []
+  let from = 0
+  let exactTotal: number | null = null
+
+  while (true) {
+    const { data, error, count } = await api
+      .from('validation_issues')
+      .select(
+        'id,staging_row_id,severity,code,detail',
+        { count: 'exact' },
+      )
+      .eq('validation_run_id', validationRunId)
+      .order('id', { ascending: true })
+      .range(from, from + VALIDATION_ISSUE_PAGE_SIZE - 1)
+
+    if (error) throw error
+
+    if (exactTotal === null && count !== null) {
+      exactTotal = count
+    }
+
+    const page = (data ?? []) as unknown as ValidationIssue[]
+    issues.push(...page)
+
+    if (
+      page.length < VALIDATION_ISSUE_PAGE_SIZE ||
+      (exactTotal !== null && issues.length >= exactTotal)
+    ) {
+      break
+    }
+
+    from += VALIDATION_ISSUE_PAGE_SIZE
+  }
+
+  return {
+    issues,
+    total: exactTotal ?? issues.length,
+  }
+}
 
 function mapSourceContract(row: Record<string, unknown>): SourceContract {
   return {
@@ -66,7 +113,21 @@ export async function getAdminBatchDetail(batchId: string): Promise<BatchDetail>
   ])
   if (batchError) throw batchError
   const { data: contract } = await api.from('source_contract_versions').select('*').eq('id', (batch as ImportBatch).source_contract_version_id).maybeSingle()
-  return { batch: batch as ImportBatch, contract: contract ? mapSourceContract(contract as Record<string, unknown>) : null, validation: validation as unknown as ValidationRun | null, reconciliation: reconciliation as unknown as Reconciliation | null, candidate: candidate as unknown as Candidate | null }
+  const validationRun = validation as unknown as ValidationRun | null
+  const issueResult = validationRun
+    ? await listValidationIssues(api, validationRun.id)
+    : { issues: [], total: 0 }
+  return {
+    batch: batch as ImportBatch,
+    contract: contract
+      ? mapSourceContract(contract as Record<string, unknown>)
+      : null,
+    validation: validationRun,
+    issues: issueResult.issues,
+    issueTotal: issueResult.total,
+    reconciliation: reconciliation as unknown as Reconciliation | null,
+    candidate: candidate as unknown as Candidate | null,
+  }
 }
 
 export async function createImportBatch(input: { contractId: string; scopeKey: string; sourceSheet: string; sourceHeaders: string[]; fileHash: string; fileSize: number; expectedRows: number; expectedChunks: number; expectedControlTotals: Record<string, number | string> }) {

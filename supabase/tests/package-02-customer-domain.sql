@@ -6,8 +6,8 @@ returns void language plpgsql as $$ begin if not condition then raise exception 
 
 do $$
 declare
-  v_admin_id uuid := gen_random_uuid(); v_viewer_id uuid := gen_random_uuid(); v_contract_id uuid; v_v2_contract_id uuid;
-  v_batch_id uuid := gen_random_uuid(); v_batch_two_id uuid := gen_random_uuid();
+  v_admin_id uuid := gen_random_uuid(); v_viewer_id uuid := gen_random_uuid(); v_contract_id uuid; v_v2_contract_id uuid; v_v3_contract_id uuid;
+  v_batch_id uuid := gen_random_uuid(); v_batch_two_id uuid := gen_random_uuid(); v_failed_v3_batch_id uuid := gen_random_uuid(); v_semantic_batch_id uuid := gen_random_uuid(); v_semantic_chunk_id uuid := gen_random_uuid(); v_semantic_validation_id uuid;
   v_validation_id uuid := gen_random_uuid(); v_reconciliation_id uuid := gen_random_uuid(); v_candidate_id uuid := gen_random_uuid(); v_publication_id uuid := gen_random_uuid();
   v_validation_two_id uuid := gen_random_uuid(); v_reconciliation_two_id uuid := gen_random_uuid(); v_candidate_two_id uuid := gen_random_uuid(); v_publication_two_id uuid := gen_random_uuid();
   v_bad_batch_id uuid := gen_random_uuid(); v_bad_validation_batch_id uuid := gen_random_uuid(); v_bad_reconciliation_batch_id uuid := gen_random_uuid();
@@ -43,18 +43,30 @@ begin
     not exists (select 1 from public.import_batches where source_contract_version_id=v_v2_contract_id),
     'retired CUSTOMER_MASTER version 2 has no import batch references'
   );
-  select id into v_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='3';
+  select id into v_v3_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='3';
+  perform pg_temp.assert_true(
+    v_v3_contract_id is not null and exists (select 1 from public.source_contract_versions where id=v_v3_contract_id and not is_active and retired_at is not null),
+    'known CUSTOMER_MASTER version 3 is retained and retired'
+  );
+  reset role;
+  insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,status)
+  values (v_failed_v3_batch_id,v_v3_contract_id,'CUSTOMER_MASTER','historical-v3','SAPUI5 dışa aktarımı','[]','imports/'||v_failed_v3_batch_id||'/source.xlsx',repeat('f',64),1,0,0,v_admin_id,'FAILED');
+  perform pg_temp.assert_true(
+    exists (select 1 from public.import_batches where id=v_failed_v3_batch_id and source_contract_version_id=v_v3_contract_id and status='FAILED'),
+    'retired CUSTOMER_MASTER version 3 may retain failed batch provenance'
+  );
+  select id into v_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='4';
   perform pg_temp.assert_true(
     v_contract_id is not null
-    and (select count(*)=1 from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='3')
+    and (select count(*)=1 from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='4')
     and exists (
       select 1 from public.source_contract_versions
       where id=v_contract_id
         and source_kind='CUSTOMER_MASTER'
-        and version='3'
+        and version='4'
         and required_sheet='SAPUI5 dışa aktarımı'
         and required_headers='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
-        and required_fields='["Müşteri","Müşteri Adı","Tabela Adı","Satış Temsilcisi Adı","Dist Satış Şefi Adı","Satış Kanalı Tanımı","Müşteri Hacim Segmenti","Müşteri Durumu"]'::jsonb
+        and required_fields='["Müşteri"]'::jsonb
         and control_total_fields='{}'::jsonb
         and control_total_scales='{}'::jsonb
         and publication_mode='FULL_REPLACE'::public.publication_mode
@@ -62,7 +74,19 @@ begin
         and retired_at is null
         and created_by is null
     ),
-    'migration-provided CUSTOMER_MASTER version 3 is canonical and active'
+    'migration-provided CUSTOMER_MASTER version 4 is canonical and active'
+  );
+  insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at)
+  values (v_semantic_batch_id,v_contract_id,'CUSTOMER_MASTER','semantic-validation','SAPUI5 dışa aktarımı','[]','imports/'||v_semantic_batch_id||'/source.xlsx',repeat('7',64),1,1,1,v_admin_id,now());
+  insert into public.import_chunks(id,batch_id,chunk_no,row_offset,chunk_hash,server_chunk_hash,row_count) values (v_semantic_chunk_id,v_semantic_batch_id,0,0,repeat('8',64),repeat('8',64),1);
+  insert into public.staging_rows(batch_id,chunk_id,source_row_no,payload,payload_hash,row_status)
+  values (v_semantic_batch_id,v_semantic_chunk_id,1,jsonb_build_object('Müşteri','ABC-OUT-OF-SCOPE','Satış Temsilcisi Adı',null,'Müşteri Hacim Segmenti',null),repeat('9',64),'PENDING');
+  update public.import_batches set received_chunks=1,staged_rows=1 where id=v_semantic_batch_id;
+  set local role authenticated; v_semantic_validation_id := public.validate_import_batch(v_semantic_batch_id); reset role;
+  perform pg_temp.assert_true(
+    (select valid_rows=1 and blocked_rows=0 and duplicate_rows=0 from public.validation_runs where id=v_semantic_validation_id)
+    and (select row_status='VALID' from public.staging_rows where batch_id=v_semantic_batch_id and source_row_no=1),
+    'v4 allows non-500 rows with missing optional Package 02 fields to remain valid Package 01 rows'
   );
   reset role;
   insert into public.import_batches(id, source_contract_version_id, source_kind, scope_key, source_sheet, source_headers, storage_object_path, declared_file_hash, file_size_bytes, expected_rows, expected_chunks, created_by)
@@ -126,6 +150,13 @@ begin
       (8,jsonb_build_object('Müşteri','500006','Müşteri Adı','Conflict B','Tabela Adı','Trade B','Satış Temsilcisi Adı','Rep Conflict','Dist Satış Şefi Adı','SSM B','Satış Kanalı Tanımı','Standart Kapalı','Müşteri Hacim Segmenti','Silver','Müşteri Durumu','Aktif'),'VALID'::public.staging_row_status),
       (9,jsonb_build_object('Müşteri','ABC500001','Müşteri Adı','Out of Scope','Müşteri Durumu','Aktif'),'VALID'::public.staging_row_status),
       (10,jsonb_build_object('Müşteri','500005','Müşteri Durumu','Bilinmiyor'),'VALID'::public.staging_row_status),
+      (11,jsonb_build_object('Müşteri','500007','Müşteri Durumu','Aktif (A)'),'VALID'::public.staging_row_status),
+      (12,jsonb_build_object('Müşteri','500008','Müşteri Durumu','Pasif (P)'),'VALID'::public.staging_row_status),
+      (13,jsonb_build_object('Müşteri','500009','Müşteri Durumu','İPTAL'),'VALID'::public.staging_row_status),
+      (14,jsonb_build_object('Müşteri','500010','Müşteri Durumu','iptal'),'VALID'::public.staging_row_status),
+      (15,jsonb_build_object('Müşteri','500011','Müşteri Durumu','İptal (C)'),'VALID'::public.staging_row_status),
+      (16,jsonb_build_object('Müşteri','500012','Müşteri Durumu','cancelled'),'VALID'::public.staging_row_status),
+      (17,jsonb_build_object('Müşteri','500013','Müşteri Durumu','canceled'),'VALID'::public.staging_row_status),
       (9001,jsonb_build_object('Müşteri','500701','Müşteri Adı','Blocked','Müşteri Durumu','Aktif'),'BLOCKED'::public.staging_row_status),
       (9002,jsonb_build_object('Müşteri','500702','Müşteri Adı','Excluded','Müşteri Durumu','Aktif'),'EXCLUDED'::public.staging_row_status),
       (9003,jsonb_build_object('Müşteri','500703','Müşteri Adı','Duplicate','Müşteri Durumu','Aktif'),'DUPLICATE'::public.staging_row_status)
@@ -166,10 +197,14 @@ begin
   perform pg_temp.assert_true((select status='ACTIVE' and channel='OPEN' from public.customers where customer_id='500001'), 'active status precedence and Standart Açık mapping');
   perform pg_temp.assert_true((select customer_name='Alpha' and trade_name='Alpha Shop' and segment='A Diamond' from public.customers where customer_id='500001'), 'source-bound canonical profile resolution');
   perform pg_temp.assert_true((select status='CANCELLED' and channel='OPEN' from public.customers where customer_id='500002'), 'cancelled-only and Horeca mapping');
+  perform pg_temp.assert_true((select status='ACTIVE' from public.customers where customer_id='500007'), 'Aktif (A) maps to ACTIVE');
+  perform pg_temp.assert_true((select status='PASSIVE' from public.customers where customer_id='500008'), 'Pasif (P) maps to PASSIVE');
+  perform pg_temp.assert_true((select status='CANCELLED' from public.customers where customer_id in ('500009','500010','500011','500012','500013') group by status having count(*)=5), 'all exact cancelled variants map to CANCELLED');
   perform pg_temp.assert_true((select channel='OPEN' from public.customers where customer_id='500003'), 'Otel maps to open channel');
   perform pg_temp.assert_true((select channel='CLOSED' from public.customers where customer_id='500004'), 'Standart Kapalı maps to closed channel');
   perform pg_temp.assert_true((select channel='CLOSED' and status='UNKNOWN' from public.customers where customer_id='500005'), 'Ekomini mapping and cancelled plus unknown status');
   perform pg_temp.assert_true((select channel='UNCLASSIFIED' from public.customers where customer_id='500006'), 'open/closed conflict is unclassified');
+  perform pg_temp.assert_true((select status='UNKNOWN' and status_resolution_state='UNKNOWN_REVIEW' from public.customer_resolutions where customer_id='500003' and snapshot_id=v_snapshot_id), 'unrecognized status remains UNKNOWN review');
   perform pg_temp.assert_true((select channel_resolution_state='CHANNEL_CONFLICT' from public.customer_resolutions cr where cr.customer_id='500006' and cr.snapshot_id=v_snapshot_id), 'channel conflict state is retained');
   perform pg_temp.assert_true((select customer_name is null and customer_name_resolution_state='CONFLICT_REVIEW' and trade_name_resolution_state='CONFLICT_REVIEW' and segment_resolution_state='CONFLICT_REVIEW' from public.customer_resolutions cr where cr.customer_id='500006' and cr.snapshot_id=v_snapshot_id), 'profile conflicts are not arbitrarily selected');
   perform pg_temp.assert_true((select financial_scope_state='DEFERRED_PACKAGE_10' and not sellout_fkns_eligible from public.customer_resolutions cr where cr.customer_id='500002' and cr.snapshot_id=v_snapshot_id), 'financial scope is deferred');
