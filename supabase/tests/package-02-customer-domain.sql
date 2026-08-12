@@ -20,6 +20,37 @@ begin
   values (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'p02-source-admin@example.test', 'x', now(), '{}', '{}', now(), now()),
          (v_viewer_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'p02-source-viewer@example.test', 'x', now(), '{}', '{}', now(), now());
   update public.user_profiles set role='admin' where user_id=v_admin_id;
+  perform pg_temp.assert_true(
+    (select count(*) = 2
+     from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname in ('customer_master_snapshots', 'customer_master_observations')
+       and c.relrowsecurity)
+    and (select count(*) = 2
+         from pg_policy p
+         join pg_class c on c.oid = p.polrelid
+         join pg_namespace n on n.oid = c.relnamespace
+         where n.nspname = 'public'
+           and c.relname in ('customer_master_snapshots', 'customer_master_observations')
+           and p.polcmd = 'r'
+           and p.polname in ('customer_master_snapshots_admin_read', 'customer_master_observations_admin_read')
+           and 'authenticated'::regrole::oid = any(p.polroles)
+           and pg_get_expr(p.polqual, p.polrelid) like '%is_admin()%')
+    and has_table_privilege('authenticated', 'public.customer_master_snapshots', 'select')
+    and has_table_privilege('authenticated', 'public.customer_master_observations', 'select')
+    and not exists (
+      select 1
+      from pg_policy p
+      join pg_class c on c.oid = p.polrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relname in ('customer_master_snapshots', 'customer_master_observations')
+        and p.polcmd = 'r'
+        and pg_get_expr(p.polqual, p.polrelid) in ('true', '(true)')
+    ),
+    'Package 02 provenance tables use admin-only SELECT RLS with no permissive true policy'
+  );
   set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
   select id into v_v2_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='2';
   perform pg_temp.assert_true(
@@ -249,8 +280,29 @@ begin
   perform pg_temp.assert_true((select current_snapshot_state='NOT_PRESENT_IN_CURRENT_MASTER' from public.customers where customer_id='500002'), 'missing current customer remains distinct from status');
 
   reset role; set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_viewer_id::text, true);
+  perform pg_temp.assert_true(
+    (select count(*) = 0 from public.customer_master_snapshots where id in (v_snapshot_id, v_snapshot_two_id)),
+    'viewer cannot directly read Customer Master snapshot provenance'
+  );
+  perform pg_temp.assert_true(
+    (select count(*) = 0 from public.customer_master_observations where snapshot_id in (v_snapshot_id, v_snapshot_two_id)),
+    'viewer cannot directly read Customer Master observation provenance'
+  );
+  perform pg_temp.assert_true(
+    (select count(*) > 0 from public.customers where customer_id = '500001'),
+    'viewer retains resolved customer workspace read access'
+  );
   v_rejected := false; begin perform public.stage_customer_master_rows(v_snapshot_two_id); exception when others then v_rejected := true; end;
   perform pg_temp.assert_true(v_rejected, 'viewer cannot mutate Customer Master');
+  reset role; set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  perform pg_temp.assert_true(
+    (select count(*) = 2 from public.customer_master_snapshots where id in (v_snapshot_id, v_snapshot_two_id)),
+    'admin can directly read Customer Master snapshot provenance'
+  );
+  perform pg_temp.assert_true(
+    (select count(*) > 0 from public.customer_master_observations where snapshot_id in (v_snapshot_id, v_snapshot_two_id)),
+    'admin can directly read Customer Master observation provenance'
+  );
 end $$;
 select 'Package 02 source-bound customer domain tests PASS.' as result;
 rollback;
