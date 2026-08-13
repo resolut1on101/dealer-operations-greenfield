@@ -51,6 +51,39 @@ begin
     ),
     'Package 02 provenance tables use admin-only SELECT RLS with no permissive true policy'
   );
+  perform pg_temp.assert_true(
+    (select count(*) = 4
+     from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname in ('customer_representatives', 'customer_representative_ssm_resolutions', 'customer_resolutions', 'customers')
+       and c.relrowsecurity)
+    and (select count(*) = 4
+         from pg_policy p
+         join pg_class c on c.oid = p.polrelid
+         join pg_namespace n on n.oid = c.relnamespace
+         where n.nspname = 'public'
+           and (c.relname, p.polname) in (
+             ('customer_representatives', 'customer_representatives_admin_read'),
+             ('customer_representative_ssm_resolutions', 'customer_representative_ssm_resolutions_admin_read'),
+             ('customer_resolutions', 'customer_resolutions_admin_read'),
+             ('customers', 'customers_admin_read')
+           )
+           and p.polcmd = 'r'
+           and 'authenticated'::regrole::oid = any(p.polroles)
+           and pg_get_expr(p.polqual, p.polrelid) like '%is_admin()%')
+    and not exists (
+      select 1
+      from pg_policy p
+      join pg_class c on c.oid = p.polrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relname in ('customer_representatives', 'customer_representative_ssm_resolutions', 'customer_resolutions', 'customers')
+        and p.polcmd = 'r'
+        and pg_get_expr(p.polqual, p.polrelid) in ('true', '(true)')
+    ),
+    'Package 02 technical and customer base tables use admin-only SELECT RLS with no permissive true policy'
+  );
   set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
   select id into v_v2_contract_id from public.source_contract_versions where source_kind='CUSTOMER_MASTER' and version='2';
   perform pg_temp.assert_true(
@@ -201,6 +234,11 @@ begin
   select v_batch_id,v_chunk_id,2000+g,jsonb_build_object('Müşteri','50020'||g,'Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM A','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','50020'||g,'Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM A','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'::public.staging_row_status from generate_series(1,9) g
   union all select v_batch_id,v_chunk_id,2100,jsonb_build_object('Müşteri','5002099','Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM B','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','5002099','Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM B','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'::public.staging_row_status;
   insert into public.staging_rows(batch_id,chunk_id,source_row_no,payload,payload_hash,row_status)
+  values
+    (v_batch_id,v_chunk_id,2351,jsonb_build_object('Müşteri','500201','Satış Temsilcisi Adı',null,'Dist Satış Şefi Adı','SSM A','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','500201','Satış Temsilcisi Adı',null,'Dist Satış Şefi Adı','SSM A','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'),
+    (v_batch_id,v_chunk_id,2352,jsonb_build_object('Müşteri','500299','Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM POISON','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','500299','Satış Temsilcisi Adı','Rep Exact','Dist Satış Şefi Adı','SSM POISON','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'),
+    (v_batch_id,v_chunk_id,2353,jsonb_build_object('Müşteri','500299','Satış Temsilcisi Adı','Rep Other','Dist Satış Şefi Adı','SSM POISON','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','500299','Satış Temsilcisi Adı','Rep Other','Dist Satış Şefi Adı','SSM POISON','Satış Kanalı Tanımı','Horeca','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID');
+  insert into public.staging_rows(batch_id,chunk_id,source_row_no,payload,payload_hash,row_status)
   select v_batch_id,v_chunk_id,3000+g,jsonb_build_object('Müşteri','50030'||g,'Satış Temsilcisi Adı','Rep Below','Dist Satış Şefi Adı',case when g<=6 then 'SSM A' else 'SSM B' end,'Satış Kanalı Tanımı','Otel','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','50030'||g,'Satış Temsilcisi Adı','Rep Below','Dist Satış Şefi Adı',case when g<=6 then 'SSM A' else 'SSM B' end,'Satış Kanalı Tanımı','Otel','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'::public.staging_row_status from generate_series(1,10) g;
   insert into public.staging_rows(batch_id,chunk_id,source_row_no,payload,payload_hash,row_status)
   select v_batch_id,v_chunk_id,4000+g,jsonb_build_object('Müşteri','50040'||g,'Satış Temsilcisi Adı','Rep Tie','Dist Satış Şefi Adı',case when g<=5 then 'SSM A' else 'SSM B' end,'Satış Kanalı Tanımı','Ekomini','Müşteri Durumu','Aktif'),encode(digest(jsonb_build_object('Müşteri','50040'||g,'Satış Temsilcisi Adı','Rep Tie','Dist Satış Şefi Adı',case when g<=5 then 'SSM A' else 'SSM B' end,'Satış Kanalı Tanımı','Ekomini','Müşteri Durumu','Aktif')::text,'sha256'),'hex'),'VALID'::public.staging_row_status from generate_series(1,10) g;
@@ -242,10 +280,47 @@ begin
 
   set local role authenticated;
   v_result := public.resolve_representative_ssm('Rep Above', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='RESOLVED' and v_result->>'canonical_ssm'='SSM A' and (v_result->>'known_active_count')::bigint=11 and (v_result->>'dominant_ratio')::numeric > .9, 'above 90 percent dominant ratio');
-  v_result := public.resolve_representative_ssm('Rep Exact', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='RESOLVED' and v_result->>'canonical_ssm'='SSM A' and (v_result->>'known_active_count')::bigint=10 and (v_result->>'dominant_ratio')::numeric = .9, 'exactly 90 percent dominant ratio');
+  perform pg_temp.assert_true(
+    (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep above' and c.canonical_ssm='SSM A' and c.ssm_resolution_state='RESOLVED')
+    and (select count(*) = 0 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep below' and (c.canonical_ssm is not null or c.ssm_resolution_state <> 'UNRESOLVED')),
+    'resolving Representative A updates all and only its resolved current customers'
+  );
+  perform pg_temp.assert_true(
+    (select canonical_ssm is null and ssm_resolution_state='UNRESOLVED' from public.customers where customer_id='500006'),
+    'resolving a representative does not mutate a conflicting representative identity'
+  );
   v_result := public.resolve_representative_ssm('Rep Below', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='MANUAL_REVIEW' and (v_result->>'dominant_ratio')::numeric < .9, 'below 90 percent requires review');
+  perform pg_temp.assert_true(
+    (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep above' and c.canonical_ssm='SSM A' and c.ssm_resolution_state='RESOLVED')
+    and (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep below' and c.canonical_ssm is null and c.ssm_resolution_state='MANUAL_REVIEW'),
+    'Representative B review state does not overwrite Representative A customers'
+  );
+  v_result := public.resolve_representative_ssm('Rep Exact', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='RESOLVED' and v_result->>'canonical_ssm'='SSM A' and (v_result->>'known_active_count')::bigint=10 and (v_result->>'dominant_ratio')::numeric = .9, 'exactly 90 percent dominant ratio');
+  perform pg_temp.assert_true(
+    (select representative_resolution_state='CONFLICTING' from public.customer_resolutions where snapshot_id=v_snapshot_id and customer_id='500299')
+    and not exists (select 1 from public.customer_representative_ssm_resolutions rs join public.customer_representatives r on r.id=rs.representative_id where rs.snapshot_id=v_snapshot_id and r.normalized_name='rep exact' and rs.raw_ssm_names ? 'SSM POISON')
+    and not exists (select 1 from public.customers where customer_id='500299' and canonical_ssm is not null),
+    'conflicting raw representative poison is excluded from authoritative SSM evidence and customer materialization'
+  );
   v_result := public.resolve_representative_ssm('Rep Tie', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='MANUAL_REVIEW', 'tie requires review');
   v_result := public.resolve_representative_ssm('Rep Zero', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='UNRESOLVED', 'zero denominator remains unresolved');
+  perform pg_temp.assert_true(
+    (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep above' and c.canonical_ssm='SSM A' and c.ssm_resolution_state='RESOLVED')
+    and (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep below' and c.canonical_ssm is null and c.ssm_resolution_state='MANUAL_REVIEW'),
+    'unresolved representative does not wipe unrelated customer hierarchy'
+  );
+  perform pg_temp.assert_true(
+    not exists (
+      select 1
+      from public.customers c
+      join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id
+      join public.customer_representatives r on r.id=cr.representative_id
+      where c.active_snapshot_id=v_snapshot_id
+        and c.canonical_ssm is not null
+        and (cr.representative_resolution_state <> 'RESOLVED' or r.ssm_resolution_state <> 'RESOLVED' or r.canonical_ssm is distinct from c.canonical_ssm)
+    ),
+    'current customer chief values match their resolved representative SSM'
+  );
   reset role;
 
   insert into public.import_batches(id,source_contract_version_id,source_kind,scope_key,source_sheet,source_headers,storage_object_path,declared_file_hash,file_size_bytes,expected_rows,expected_chunks,created_by,source_verified_at)
@@ -289,8 +364,34 @@ begin
     'viewer cannot directly read Customer Master observation provenance'
   );
   perform pg_temp.assert_true(
-    (select count(*) > 0 from public.customers where customer_id = '500001'),
-    'viewer retains resolved customer workspace read access'
+    (select count(*) = 0 from public.customer_resolutions where customer_id = '500001')
+    and (select count(*) = 0 from public.customer_representatives)
+    and (select count(*) = 0 from public.customer_representative_ssm_resolutions)
+    and (select count(*) = 0 from public.customers where customer_id = '500001'),
+    'viewer cannot directly read Package 02 technical base tables'
+  );
+  perform pg_temp.assert_true(
+    (select representative = 'rep above' and chief = 'SSM B'
+     from public.read_current_customer_business_surface() where customer_id = '500001'),
+    'viewer safe business surface returns resolved representative and chief values'
+  );
+  perform pg_temp.assert_true(
+    (select representative is null and chief is null
+     from public.read_current_customer_business_surface() where customer_id = '500006'),
+    'viewer safe business surface does not collapse conflicting or unresolved organization candidates'
+  );
+  perform pg_temp.assert_true(
+    (select count(*) = 8
+     from public.read_current_customer_business_surface() s
+     cross join lateral jsonb_object_keys(to_jsonb(s)) as key
+     where s.customer_id = '500001')
+    and not exists (
+      select 1
+      from public.read_current_customer_business_surface() s
+      cross join lateral jsonb_object_keys(to_jsonb(s)) as key
+      where key in ('snapshot_id', 'source_observation_ids', 'resolution_evidence', 'raw_payload', 'current_resolution')
+    ),
+    'safe business surface exposes only fixed business columns and no technical evidence fields'
   );
   v_rejected := false; begin perform public.stage_customer_master_rows(v_snapshot_two_id); exception when others then v_rejected := true; end;
   perform pg_temp.assert_true(v_rejected, 'viewer cannot mutate Customer Master');
@@ -302,6 +403,13 @@ begin
   perform pg_temp.assert_true(
     (select count(*) > 0 from public.customer_master_observations where snapshot_id in (v_snapshot_id, v_snapshot_two_id)),
     'admin can directly read Customer Master observation provenance'
+  );
+  perform pg_temp.assert_true(
+    (select count(*) > 0 from public.customer_resolutions where customer_id = '500001')
+    and (select count(*) > 0 from public.customer_representatives)
+    and (select count(*) > 0 from public.customer_representative_ssm_resolutions)
+    and (select count(*) > 0 from public.customers where customer_id = '500001'),
+    'admin retains direct technical Package 02 evidence access'
   );
 end $$;
 select 'Package 02 source-bound customer domain tests PASS.' as result;

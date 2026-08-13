@@ -9,7 +9,7 @@ export type ApplicationRole = z.infer<typeof applicationRoleSchema>
 export const releaseStateSchema = z.enum(['LIVE_TESTING', 'VERIFIED', 'BLOCKED'])
 export type ReleaseState = z.infer<typeof releaseStateSchema>
 
-export const packageIdentifierSchema = z.enum(['00C', '01', '02'])
+export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U'])
 
 export const customerStatusSchema = z.enum(['ACTIVE', 'PASSIVE', 'CANCELLED', 'UNKNOWN'])
 export type CustomerStatus = z.infer<typeof customerStatusSchema>

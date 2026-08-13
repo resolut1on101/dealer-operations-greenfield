@@ -13,6 +13,8 @@ describe('Package release metadata contract', () => {
     expect(packageIdentifierSchema.parse('00C')).toBe('00C')
     expect(packageIdentifierSchema.parse('01')).toBe('01')
     expect(packageIdentifierSchema.parse('02')).toBe('02')
+    expect(packageIdentifierSchema.parse('02U')).toBe('02U')
+    expect(() => packageIdentifierSchema.parse('03')).toThrow()
     expect(applicationEnvironmentSchema.parse('live')).toBe('live')
   })
 })
