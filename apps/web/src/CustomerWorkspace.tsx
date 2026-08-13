@@ -1,40 +1,508 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import type { ApplicationRole } from '@dealer-operations/contracts'
 import { releasePackage } from './lib/environment'
-import { type CustomerFilters, type CustomerFilterOptions, type CustomerProvenance, type CustomerRecord, type CustomerSort, type CustomerSortKey, getCustomerFilterOptions, getCustomerProvenance, listAllCustomers, listCustomers } from './lib/customer-api'
+import {
+  type CustomerFilters,
+  type CustomerFilterOptions,
+  type CustomerProvenance,
+  type CustomerRecord,
+  type CustomerSort,
+  type CustomerSortKey,
+  getCustomerFilterOptions,
+  getCustomerProvenance,
+  listAllCustomers,
+  listCustomers,
+} from './lib/customer-api'
 
 const PAGE_SIZE = 50
 const emptyFilters: CustomerFilters = { search: '', status: '', channel: '', segment: '', representative: '', chief: '' }
-type View = 'customers' | 'organization'; type Density = 'compact' | 'standard' | 'comfortable'; type FilterKey = 'status' | 'channel' | 'segment' | 'representative' | 'chief'
-type ColumnKey = 'tradeName' | 'status' | 'channel' | 'segment' | 'representative' | 'chief'
-const columns: { key: ColumnKey; label: string }[] = [{ key: 'tradeName', label: 'Tabela' }, { key: 'status', label: 'Durum' }, { key: 'channel', label: 'Satış Kanalı' }, { key: 'segment', label: 'Segment' }, { key: 'representative', label: 'Satış Temsilcisi' }, { key: 'chief', label: 'Dist. Satış Şefi' }]
+type View = 'customers' | 'organization'
 
-function display(value: string | null) { return value ?? '—' }
-function initials(value: string | null) { return display(value).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase('tr') }
-function copyValue(value: string, onCopied: () => void) { void (navigator.clipboard ? navigator.clipboard.writeText(value) : Promise.reject(new Error('Clipboard unavailable'))).then(onCopied).catch(() => undefined) }
+type OrgSelection = { chief: string | null; representative: string | null }
+
+function display(value: string | null | undefined) { return value?.trim() || '—' }
+function initials(value: string | null | undefined) { return display(value).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase('tr-TR') }
+function personName(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/\s+/g, ' ')
+  if (!normalized) return '—'
+  return normalized
+    .toLocaleLowerCase('tr-TR')
+    .split(' ')
+    .map((word) => word ? `${word.slice(0, 1).toLocaleUpperCase('tr-TR')}${word.slice(1)}` : word)
+    .join(' ')
+}
+function channelLabel(value: string) {
+  if (value === 'OPEN') return 'Açık Kanal'
+  if (value === 'CLOSED') return 'Kapalı Kanal'
+  if (value === 'UNCLASSIFIED') return 'Sınıflandırılmamış'
+  return value
+}
+function statusLabel(value: string) {
+  if (value === 'ACTIVE') return 'Aktif'
+  if (value === 'PASSIVE') return 'Pasif'
+  if (value === 'CANCELLED') return 'İptal'
+  if (value === 'UNKNOWN') return 'Bilinmiyor'
+  return value
+}
+function statusClass(value: string) {
+  if (value === 'ACTIVE') return 'active'
+  if (value === 'PASSIVE') return 'passive'
+  if (value === 'CANCELLED') return 'cancelled'
+  return 'unknown'
+}
+function channelClass(value: string) { return value === 'OPEN' ? 'open' : value === 'CLOSED' ? 'closed' : 'unclassified' }
+function copyValue(value: string, onCopied: () => void) {
+  void (navigator.clipboard ? navigator.clipboard.writeText(value) : Promise.reject(new Error('Clipboard unavailable')))
+    .then(onCopied)
+    .catch(() => undefined)
+}
+function counts(values: string[]) {
+  const result = new Map<string, number>()
+  values.forEach((value) => result.set(value, (result.get(value) ?? 0) + 1))
+  return [...result.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'))
+}
+function loadPreference<T>(key: string, fallback: T): T {
+  try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) as T : fallback } catch { return fallback }
+}
+function savePreference<T>(key: string, value: T) {
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* optional preference */ }
+}
 
 export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
-  const admin = role === 'admin'; const [view, setView] = useState<View>('customers'); const [filters, setFilters] = useState(() => loadPreference('p02u-filters', emptyFilters)); const [density, setDensity] = useState<Density>(() => loadPreference('p02u-density', 'standard')); const [page, setPage] = useState(0); const [sort, setSort] = useState<CustomerSort>({ key: 'customerId', ascending: true }); const [visible, setVisible] = useState<Record<ColumnKey, boolean>>(() => loadPreference('p02u-columns', Object.fromEntries(columns.map(({ key }) => [key, true])) as Record<ColumnKey, boolean>));
-  const [customerPage, setCustomerPage] = useState({ rows: [] as CustomerRecord[], count: 0 }); const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]); const [filterOptions, setFilterOptions] = useState<CustomerFilterOptions | null>(null); const [filterOptionsError, setFilterOptionsError] = useState(''); const [loading, setLoading] = useState(true); const [orgLoading, setOrgLoading] = useState(false); const [customerError, setCustomerError] = useState(''); const [organizationError, setOrganizationError] = useState(''); const [drawerCustomer, setDrawerCustomer] = useState<CustomerRecord | null>(null); const [provenance, setProvenance] = useState<CustomerProvenance | null>(null); const [provenanceLoading, setProvenanceLoading] = useState(false); const [provenanceError, setProvenanceError] = useState(''); const [drawerTab, setDrawerTab] = useState<'summary' | 'organization' | 'source'>('summary'); const [toast, setToast] = useState(''); const [orgSelection, setOrgSelection] = useState<{ chief: string | null; representative: string | null }>({ chief: null, representative: null }); const [allCustomersState, setAllCustomersState] = useState<'LOADING' | 'READY' | 'ERROR'>('LOADING'); const listRequestId = useRef(0); const provenanceRequestId = useRef(0); const triggerRef = useRef<HTMLElement | null>(null)
-  const applyCustomerUniverse = useCallback((rows: CustomerRecord[]) => { setAllCustomers(rows); setFilterOptions(getCustomerFilterOptions(rows)); setFilterOptionsError(''); setAllCustomersState('READY') }, [])
-  const refresh = useCallback(async () => { const requestId = ++listRequestId.current; setLoading(true); setCustomerError(''); try { const result = await listCustomers(filters, page, PAGE_SIZE, sort); if (requestId !== listRequestId.current) return; setCustomerPage(result) } catch (cause) { if (requestId === listRequestId.current) setCustomerError(cause instanceof Error ? cause.message : 'Müşteri verisi okunamadı.') } finally { if (requestId === listRequestId.current) setLoading(false) } }, [filters, page, sort])
-  useEffect(() => { void refresh() }, [refresh]); useEffect(() => { setAllCustomersState('LOADING'); void listAllCustomers().then(applyCustomerUniverse).catch((cause) => { setFilterOptionsError(cause instanceof Error ? cause.message : 'Filtre seçenekleri okunamadı.'); setAllCustomersState('ERROR') }) }, [applyCustomerUniverse]); useEffect(() => { savePreference('p02u-filters', filters) }, [filters]); useEffect(() => { savePreference('p02u-density', density) }, [density]); useEffect(() => { savePreference('p02u-columns', visible) }, [visible])
-  async function openOrganization(preferredSelection = orgSelection) { setView('organization'); setOrgLoading(true); setOrganizationError(''); try { const rows = allCustomersState === 'READY' ? allCustomers : await listAllCustomers(); if (allCustomersState !== 'READY') applyCustomerUniverse(rows); const chiefs = [...new Set(rows.map((row) => row.chief).filter((value): value is string => Boolean(value)))].sort((a) => a.localeCompare('tr')); setOrgSelection((current) => preferredSelection.chief && chiefs.includes(preferredSelection.chief) ? preferredSelection : (current.chief && chiefs.includes(current.chief) ? current : { chief: chiefs[0] ?? null, representative: null })) } catch (cause) { setOrganizationError(cause instanceof Error ? cause.message : 'Organizasyon verisi okunamadı.') } finally { setOrgLoading(false) } }
-  function openDrawer(customer: CustomerRecord) { const requestId = ++provenanceRequestId.current; triggerRef.current = document.activeElement as HTMLElement; setDrawerCustomer(customer); setDrawerTab('summary'); setProvenance(null); setProvenanceError(''); setProvenanceLoading(admin); if (admin) void getCustomerProvenance(customer).then((result) => { if (requestId === provenanceRequestId.current) setProvenance(result) }).catch((cause) => { if (requestId === provenanceRequestId.current) setProvenanceError(cause instanceof Error ? cause.message : 'Kaynak bilgisi okunamadı.') }).finally(() => { if (requestId === provenanceRequestId.current) setProvenanceLoading(false) }) }
-  const closeDrawer = useCallback(() => { ++provenanceRequestId.current; setDrawerCustomer(null); setProvenance(null); setProvenanceLoading(false); setProvenanceError(''); window.setTimeout(() => triggerRef.current?.focus(), 0) }, [])
-  function updateFilter(key: keyof CustomerFilters, value: string) { setPage(0); setFilters((current) => ({ ...current, [key]: value })) }; function notify(message: string) { setToast(message); window.setTimeout(() => setToast(''), 1800) }; function copyCustomerId(id: string) { copyValue(id, () => notify('Müşteri no kopyalandı.')) }
-  function drillToCustomers(chief: string | null, representative: string | null) { setFilters((current) => ({ ...current, chief: chief ?? '', representative: representative ?? '' })); setPage(0); setView('customers') }; function drillToOrganization(customer: CustomerRecord) { if (!customer.chief || !customer.representative) return; const selection = { chief: customer.chief, representative: customer.representative }; setOrgSelection(selection); void openOrganization(selection) }
-  const pages = Math.max(1, Math.ceil(customerPage.count / PAGE_SIZE)); const selectedOrgCustomers = useMemo(() => orgSelection.chief ? allCustomers.filter((customer) => (!orgSelection.representative || customer.representative === orgSelection.representative) && customer.chief === orgSelection.chief) : [], [allCustomers, orgSelection])
-  return <section className={`customer-workspace density-${density}`}><header className="customer-page-head"><div><p className="eyebrow">PACKAGE {releasePackage} · MÜŞTERİ MASTER</p><h1 id="page-title">Müşteriler</h1><p>Resolved müşteri evrenini bulun, iş bağlamını inceleyin ve organizasyondaki yerine ilerleyin.</p></div><div className="customer-freshness"><span aria-hidden="true" /> Güncel yayın yüzeyi</div></header><div className="workspace-tabs" role="tablist" aria-label="Müşteri çalışma alanı"><button type="button" role="tab" aria-selected={view === 'customers'} className={view === 'customers' ? 'active' : ''} onClick={() => setView('customers')}>Müşteriler</button><button type="button" role="tab" aria-selected={view === 'organization'} className={view === 'organization' ? 'active' : ''} onClick={() => void openOrganization()}>Organizasyon</button></div>{view === 'customers' ? <CustomerList filters={filters} onFilter={updateFilter} customerPage={customerPage} total={allCustomersState === 'READY' ? allCustomers.length : null} filterOptions={filterOptions} filterOptionsError={filterOptionsError} loading={loading} error={customerError} pages={pages} page={page} setPage={setPage} onOpen={openDrawer} onCopy={copyCustomerId} density={density} setDensity={setDensity} sort={sort} setSort={setSort} visible={visible} setVisible={setVisible} /> : <OrganizationView customers={allCustomers} loading={orgLoading} error={organizationError} selection={orgSelection} setSelection={setOrgSelection} selectedCustomers={selectedOrgCustomers} onDrill={drillToCustomers} />}{drawerCustomer ? <CustomerDrawer admin={admin} customer={drawerCustomer} tab={drawerTab} setTab={setDrawerTab} provenance={provenance} provenanceLoading={provenanceLoading} provenanceError={provenanceError} onClose={closeDrawer} onCopy={copyCustomerId} onOrganization={() => { if (drawerCustomer.chief && drawerCustomer.representative) { closeDrawer(); drillToOrganization(drawerCustomer) } }} /> : null}{toast ? <div className="customer-toast" role="status">{toast}</div> : null}</section>
+  const admin = role === 'admin'
+  const [view, setView] = useState<View>('customers')
+  const [filters, setFilters] = useState(() => loadPreference('p02u-v7-filters', emptyFilters))
+  const [page, setPage] = useState(0)
+  const [sort, setSort] = useState<CustomerSort>({ key: 'customerId', ascending: true })
+  const [customerPage, setCustomerPage] = useState({ rows: [] as CustomerRecord[], count: 0 })
+  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([])
+  const [filterOptions, setFilterOptions] = useState<CustomerFilterOptions | null>(null)
+  const [filterOptionsError, setFilterOptionsError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [allLoading, setAllLoading] = useState(true)
+  const [customerError, setCustomerError] = useState('')
+  const [organizationError, setOrganizationError] = useState('')
+  const [drawerCustomer, setDrawerCustomer] = useState<CustomerRecord | null>(null)
+  const [provenance, setProvenance] = useState<CustomerProvenance | null>(null)
+  const [provenanceLoading, setProvenanceLoading] = useState(false)
+  const [provenanceError, setProvenanceError] = useState('')
+  const [toast, setToast] = useState('')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [orgSelection, setOrgSelection] = useState<OrgSelection>({ chief: null, representative: null })
+  const listRequestId = useRef(0)
+  const provenanceRequestId = useRef(0)
+  const triggerRef = useRef<HTMLElement | null>(null)
+
+  const applyCustomerUniverse = useCallback((rows: CustomerRecord[]) => {
+    setAllCustomers(rows)
+    setFilterOptions(getCustomerFilterOptions(rows))
+    setFilterOptionsError('')
+    setAllLoading(false)
+  }, [])
+
+  const refresh = useCallback(async () => {
+    const requestId = ++listRequestId.current
+    setLoading(true)
+    setCustomerError('')
+    try {
+      const result = await listCustomers(filters, page, PAGE_SIZE, sort)
+      if (requestId !== listRequestId.current) return
+      setCustomerPage(result)
+    } catch (cause) {
+      if (requestId === listRequestId.current) setCustomerError(cause instanceof Error ? cause.message : 'Müşteri verisi okunamadı.')
+    } finally {
+      if (requestId === listRequestId.current) setLoading(false)
+    }
+  }, [filters, page, sort])
+
+  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    setAllLoading(true)
+    void listAllCustomers()
+      .then(applyCustomerUniverse)
+      .catch((cause) => {
+        setFilterOptionsError(cause instanceof Error ? cause.message : 'Filtre seçenekleri okunamadı.')
+        setOrganizationError(cause instanceof Error ? cause.message : 'Organizasyon verisi okunamadı.')
+        setAllLoading(false)
+      })
+  }, [applyCustomerUniverse])
+  useEffect(() => { savePreference('p02u-v7-filters', filters) }, [filters])
+
+  const organizationCustomers = useMemo(
+    () => allCustomers.filter((customer) => customer.status === 'ACTIVE' && customer.representative && customer.chief),
+    [allCustomers],
+  )
+  const chiefs = useMemo(
+    () => [...new Set(organizationCustomers.map((customer) => customer.chief).filter((value): value is string => Boolean(value)))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr')),
+    [organizationCustomers],
+  )
+
+  useEffect(() => {
+    if (view !== 'organization' || !chiefs.length) return
+    setOrgSelection((current) => {
+      if (current.chief && chiefs.includes(current.chief)) return current
+      return { chief: chiefs[0], representative: null }
+    })
+  }, [chiefs, view])
+
+  function updateFilter(key: keyof CustomerFilters, value: string) {
+    setPage(0)
+    setFilters((current) => ({ ...current, [key]: value }))
+  }
+  function clearFilters() { setPage(0); setFilters(emptyFilters) }
+  function notify(message: string) { setToast(message); window.setTimeout(() => setToast(''), 1800) }
+  function copyCustomerId(id: string) { copyValue(id, () => notify('Müşteri no kopyalandı.')) }
+  function openDrawer(customer: CustomerRecord, trigger?: HTMLElement | null) {
+    const requestId = ++provenanceRequestId.current
+    triggerRef.current = trigger ?? document.activeElement as HTMLElement
+    setDrawerCustomer(customer)
+    setProvenance(null)
+    setProvenanceError('')
+    setProvenanceLoading(admin)
+    if (admin) {
+      void getCustomerProvenance(customer)
+        .then((result) => { if (requestId === provenanceRequestId.current) setProvenance(result) })
+        .catch((cause) => { if (requestId === provenanceRequestId.current) setProvenanceError(cause instanceof Error ? cause.message : 'Kaynak bilgisi okunamadı.') })
+        .finally(() => { if (requestId === provenanceRequestId.current) setProvenanceLoading(false) })
+    }
+  }
+  const closeDrawer = useCallback(() => {
+    ++provenanceRequestId.current
+    setDrawerCustomer(null)
+    setProvenance(null)
+    setProvenanceLoading(false)
+    setProvenanceError('')
+    window.setTimeout(() => triggerRef.current?.focus(), 0)
+  }, [])
+  function drillToCustomers(chief: string | null, representative: string | null) {
+    setFilters((current) => ({ ...current, chief: chief ?? '', representative: representative ?? '' }))
+    setPage(0)
+    setView('customers')
+  }
+  function drillToOrganization(customer: CustomerRecord) {
+    if (!customer.chief || !customer.representative) return
+    setOrgSelection({ chief: customer.chief, representative: customer.representative })
+    setView('organization')
+  }
+
+  const pages = Math.max(1, Math.ceil(customerPage.count / PAGE_SIZE))
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
+
+  return <section className="customer-workspace-v7">
+    <header className="customer-page-head-v7">
+      <div>
+        <p className="customer-eyebrow-v7">PACKAGE {releasePackage} · MÜŞTERİ MASTER</p>
+        <h1 id="page-title">Müşteri portföyü</h1>
+        <p>Resolved müşteri evrenini bulun, filtreleyin ve satış organizasyonu içindeki bağlamını görün.</p>
+      </div>
+      <span className="customer-freshness-v7"><i aria-hidden="true" /> Güncel yayın yüzeyi</span>
+    </header>
+
+    <div className="workspace-tabs-v7" role="tablist" aria-label="Müşteri çalışma alanı">
+      <button type="button" role="tab" aria-selected={view === 'customers'} className={view === 'customers' ? 'active' : ''} onClick={() => setView('customers')}>Müşteriler</button>
+      <button type="button" role="tab" aria-selected={view === 'organization'} className={view === 'organization' ? 'active' : ''} onClick={() => setView('organization')}>Organizasyon</button>
+    </div>
+
+    {view === 'customers' ? <CustomerList
+      filters={filters}
+      onFilter={updateFilter}
+      onClear={clearFilters}
+      customerPage={customerPage}
+      allCustomers={allCustomers}
+      allLoading={allLoading}
+      filterOptions={filterOptions}
+      filterOptionsError={filterOptionsError}
+      loading={loading}
+      error={customerError}
+      pages={pages}
+      page={page}
+      setPage={setPage}
+      sort={sort}
+      setSort={setSort}
+      onOpen={openDrawer}
+      onCopy={copyCustomerId}
+      mobileFiltersOpen={mobileFiltersOpen}
+      setMobileFiltersOpen={setMobileFiltersOpen}
+      activeFilterCount={activeFilterCount}
+    /> : <OrganizationView
+      customers={organizationCustomers}
+      loading={allLoading}
+      error={organizationError}
+      chiefs={chiefs}
+      selection={orgSelection}
+      setSelection={setOrgSelection}
+      onDrill={drillToCustomers}
+    />}
+
+    {drawerCustomer ? <CustomerDrawer
+      admin={admin}
+      customer={drawerCustomer}
+      provenance={provenance}
+      provenanceLoading={provenanceLoading}
+      provenanceError={provenanceError}
+      onClose={closeDrawer}
+      onCopy={copyCustomerId}
+      onOrganization={() => { closeDrawer(); drillToOrganization(drawerCustomer) }}
+    /> : null}
+    {toast ? <div className="customer-toast-v7" role="status">{toast}</div> : null}
+  </section>
 }
 
-function CustomerList({ filters, onFilter, customerPage, total, filterOptions, filterOptionsError, loading, error, pages, page, setPage, onOpen, onCopy, density, setDensity, sort, setSort, visible, setVisible }: { filters: CustomerFilters; onFilter: (key: keyof CustomerFilters, value: string) => void; customerPage: { rows: CustomerRecord[]; count: number }; total: number | null; filterOptions: CustomerFilterOptions | null; filterOptionsError: string; loading: boolean; error: string; pages: number; page: number; setPage: (page: number) => void; onOpen: (customer: CustomerRecord) => void; onCopy: (id: string) => void; density: Density; setDensity: (density: Density) => void; sort: CustomerSort; setSort: (sort: CustomerSort) => void; visible: Record<ColumnKey, boolean>; setVisible: (visible: Record<ColumnKey, boolean>) => void }) {
-  const options = (key: FilterKey) => filterOptions?.[key] ?? []; const optionsUnavailable = !filterOptions || Boolean(filterOptionsError); const toggleSort = (key: CustomerSortKey) => setSort({ key, ascending: sort.key === key ? !sort.ascending : true }); const head = (label: string, key: CustomerSortKey) => <button type="button" className="table-sort" onClick={() => toggleSort(key)}>{label}{sort.key === key ? (sort.ascending ? ' ↑' : ' ↓') : ''}</button>
-  const cell = (customer: CustomerRecord, key: ColumnKey) => { const value = key === 'tradeName' ? customer.tradeName : key === 'status' ? customer.status : key === 'channel' ? customer.channel : key === 'segment' ? customer.segment : key === 'representative' ? customer.representative : customer.chief; return <td key={key} title={display(value)}>{display(value)}</td> }
-  return <div className="customer-list-surface"><div className="customer-focus-row"><div><span className="metric-label">Resolved müşteriler</span><strong className="customer-count">{total === null ? '—' : total.toLocaleString('tr-TR')}</strong><span className="metric-note">Toplam yayınlanmış evren</span></div><div className="customer-toolbar"><label className="customer-search"><span className="sr-only">Müşteri ara</span><input value={filters.search} onChange={(event) => onFilter('search', event.target.value)} placeholder="Müşteri no, ad veya tabela ara" /></label><button className="secondary-button" type="button" onClick={() => setDensity(density === 'standard' ? 'compact' : density === 'compact' ? 'comfortable' : 'standard')}>Yoğunluk: {density === 'standard' ? 'Standart' : density === 'compact' ? 'Sıkı' : 'Rahat'}</button></div></div><div className="customer-filter-row" aria-label="Müşteri filtreleri">{(['status', 'channel', 'segment', 'representative', 'chief'] as const).map((key) => <label key={key}>{filterLabel(key)}<select disabled={optionsUnavailable} value={filters[key]} onChange={(event) => onFilter(key, event.target.value)}><option value="">Tümü</option>{options(key).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>)}<button className="link-button" type="button" onClick={() => (Object.keys(filters) as (keyof CustomerFilters)[]).forEach((key) => onFilter(key, ''))}>Filtreleri temizle</button></div><div className="customer-view-controls"><span>Kolonlar:</span>{columns.map(({ key, label }) => <label key={key}><input type="checkbox" checked={visible[key]} onChange={(event) => setVisible({ ...visible, [key]: event.target.checked })} />{label}</label>)}</div>{optionsUnavailable ? <div className="notice" role="status">{filterOptionsError ? 'Filtre seçenekleri yüklenemedi.' : 'Filtre seçenekleri yükleniyor…'}</div> : null}{error ? <div className="notice error" role="alert">Müşteriler yüklenemedi. {error}</div> : loading ? <div className="customer-state" role="status">Müşteri listesi yükleniyor…</div> : !customerPage.rows.length ? <div className="customer-state"><strong>Sonuç bulunamadı.</strong><span>Arama veya filtreleri genişletmeyi deneyin.</span></div> : <><div className="customer-result-count">{customerPage.count.toLocaleString('tr-TR')} sonuç</div><div className="customer-table-wrap"><table className="customer-table"><thead><tr><th scope="col" className="customer-sticky">{head('Müşteri', 'customerName')}</th><th scope="col">{head('Müşteri No', 'customerId')}</th>{visible.tradeName ? <th scope="col">{head('Tabela', 'tradeName')}</th> : null}{visible.status ? <th scope="col">{head('Durum', 'status')}</th> : null}{visible.channel ? <th scope="col">{head('Satış Kanalı', 'channel')}</th> : null}{visible.segment ? <th scope="col">{head('Segment', 'segment')}</th> : null}{visible.representative ? <th scope="col">{head('Satış Temsilcisi', 'representative')}</th> : null}{visible.chief ? <th scope="col">{head('Dist. Satış Şefi', 'chief')}</th> : null}</tr></thead><tbody>{customerPage.rows.map((customer) => <tr key={customer.customerId} tabIndex={0} onClick={() => onOpen(customer)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer) } }}><td className="customer-sticky"><div className="customer-name-cell"><span className="customer-avatar">{initials(customer.customerName)}</span><span><strong title={display(customer.customerName)}>{display(customer.customerName)}</strong><small>{customer.customerId}</small></span></div></td><td><button type="button" className="copy-customer-id" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button></td>{columns.filter(({ key }) => visible[key]).map(({ key }) => cell(customer, key))}</tr>)}</tbody></table></div><div className="customer-mobile-list">{customerPage.rows.map((customer) => <article className="customer-mobile-card" key={customer.customerId} tabIndex={0} onClick={() => onOpen(customer)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer) } }}><div className="mobile-card-head"><div className="customer-name-cell"><span className="customer-avatar">{initials(customer.customerName)}</span><strong>{display(customer.customerName)}</strong></div><span className="customer-status">{customer.status}</span></div><div className="mobile-card-id"><button type="button" className="copy-customer-id" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button></div><div className="mobile-card-grid"><span>Kanal<strong>{customer.channel}</strong></span><span>Segment<strong>{display(customer.segment)}</strong></span><span>Temsilci<strong>{display(customer.representative)}</strong></span><span>Şef<strong>{display(customer.chief)}</strong></span></div></article>)}</div><div className="customer-pagination"><span>{customerPage.count.toLocaleString('tr-TR')} sonuç · Sayfa {page + 1} / {pages}</span><div><button type="button" className="secondary-button" disabled={page === 0} onClick={() => setPage(page - 1)}>Önceki</button><button type="button" className="secondary-button" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Sonraki</button></div></div></>}</div>
+function CustomerList(props: {
+  filters: CustomerFilters
+  onFilter: (key: keyof CustomerFilters, value: string) => void
+  onClear: () => void
+  customerPage: { rows: CustomerRecord[]; count: number }
+  allCustomers: CustomerRecord[]
+  allLoading: boolean
+  filterOptions: CustomerFilterOptions | null
+  filterOptionsError: string
+  loading: boolean
+  error: string
+  pages: number
+  page: number
+  setPage: (page: number) => void
+  sort: CustomerSort
+  setSort: (sort: CustomerSort) => void
+  onOpen: (customer: CustomerRecord, trigger?: HTMLElement | null) => void
+  onCopy: (id: string) => void
+  mobileFiltersOpen: boolean
+  setMobileFiltersOpen: (open: boolean) => void
+  activeFilterCount: number
+}) {
+  const {
+    filters, onFilter, onClear, customerPage, allCustomers, allLoading, filterOptions, filterOptionsError,
+    loading, error, pages, page, setPage, sort, setSort, onOpen, onCopy, mobileFiltersOpen, setMobileFiltersOpen,
+    activeFilterCount,
+  } = props
+  const activeCount = allCustomers.filter((customer) => customer.status === 'ACTIVE').length
+  const organizedCount = allCustomers.filter((customer) => customer.status === 'ACTIVE' && customer.representative && customer.chief).length
+  const openCount = allCustomers.filter((customer) => customer.channel === 'OPEN').length
+
+  function toggleSort(key: CustomerSortKey) {
+    setPage(0)
+    setSort(sort.key === key ? { key, ascending: !sort.ascending } : { key, ascending: true })
+  }
+  function sortGlyph(key: CustomerSortKey) { return sort.key === key ? (sort.ascending ? ' ↑' : ' ↓') : '' }
+  function handleRowKey(event: KeyboardEvent<HTMLTableRowElement>, customer: CustomerRecord) {
+    if ((event.target as HTMLElement).closest('button')) return
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer, event.currentTarget) }
+  }
+
+  return <>
+    <section className="customer-summary-v7" aria-label="Müşteri portföyü özeti">
+      <article className="customer-summary-card-v7 primary"><span>Toplam yayımlanmış müşteri</span><strong>{allLoading ? '—' : allCustomers.length.toLocaleString('tr-TR')}</strong><small>Current business read surface</small></article>
+      <article className="customer-summary-card-v7"><span>Aktif müşteri</span><strong>{allLoading ? '—' : activeCount.toLocaleString('tr-TR')}</strong><small>Resolved durum</small></article>
+      <article className="customer-summary-card-v7"><span>Organizasyona bağlı</span><strong>{allLoading ? '—' : organizedCount.toLocaleString('tr-TR')}</strong><small>%90 kuralıyla çözümlenmiş hiyerarşi</small></article>
+      <article className="customer-summary-card-v7"><span>Açık Kanal</span><strong>{allLoading ? '—' : openCount.toLocaleString('tr-TR')}</strong><small>Yayımlanmış müşteri evreni</small></article>
+    </section>
+
+    <section className="customer-list-surface-v7">
+      <div className="customer-list-head-v7">
+        <div><strong>Resolved customer listesi</strong><span>Müşteri no, tabela, müşteri veya temsilci ile hızlı arama.</span></div>
+        <div className="customer-search-actions-v7">
+          <label className="customer-search-v7"><span aria-hidden="true">⌕</span><input value={filters.search} onChange={(event) => onFilter('search', event.target.value)} placeholder="Müşteri no, ad, tabela ara…" /></label>
+          <button type="button" className="mobile-filter-button-v7" onClick={() => setMobileFiltersOpen(true)}>Filtreler <b>{activeFilterCount}</b></button>
+        </div>
+      </div>
+
+      <div className={`customer-filter-panel-v7 ${mobileFiltersOpen ? 'mobile-open' : ''}`}>
+        <div className="mobile-filter-head-v7"><div><strong>Filtreler</strong><span>Sonuçları daraltın</span></div><button type="button" aria-label="Filtreleri kapat" onClick={() => setMobileFiltersOpen(false)}>×</button></div>
+        <FilterSelect label="Durum" value={filters.status} values={filterOptions?.status ?? []} displayValue={statusLabel} onChange={(value) => onFilter('status', value)} />
+        <FilterSelect label="Satış Kanalı" value={filters.channel} values={filterOptions?.channel ?? []} displayValue={channelLabel} onChange={(value) => onFilter('channel', value)} />
+        <FilterSelect label="Segment" value={filters.segment} values={filterOptions?.segment ?? []} onChange={(value) => onFilter('segment', value)} />
+        <FilterSelect label="Satış Temsilcisi" value={filters.representative} values={filterOptions?.representative ?? []} displayValue={personName} onChange={(value) => onFilter('representative', value)} />
+        <FilterSelect label="Satış Şefi" value={filters.chief} values={filterOptions?.chief ?? []} displayValue={personName} onChange={(value) => onFilter('chief', value)} />
+        <div className="filter-actions-v7"><button type="button" onClick={onClear}>Temizle</button><button type="button" className="primary" onClick={() => setMobileFiltersOpen(false)}>Sonuçları göster</button></div>
+      </div>
+      {mobileFiltersOpen ? <button className="mobile-filter-backdrop-v7" type="button" aria-label="Filtreleri kapat" onClick={() => setMobileFiltersOpen(false)} /> : null}
+
+      <ActiveFilterChips filters={filters} onFilter={onFilter} />
+      {filterOptionsError ? <div className="customer-notice-v7 warning">Filtre seçenekleri eksik olabilir. {filterOptionsError}</div> : null}
+      {error ? <div className="customer-notice-v7 error" role="alert">Müşteri verisi okunamadı. {error}</div> : null}
+      {loading ? <div className="customer-loading-v7" role="status"><i /> Müşteriler yükleniyor…</div> : null}
+
+      <div className="customer-result-bar-v7"><strong>{customerPage.count.toLocaleString('tr-TR')} kayıt</strong><span>Sayfa başına {PAGE_SIZE}</span></div>
+
+      <div className="customer-table-wrap-v7">
+        <table className="customer-table-v7">
+          <thead><tr>
+            <th><button type="button" onClick={() => toggleSort('customerId')}>Müşteri No{sortGlyph('customerId')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('tradeName')}>Tabela{sortGlyph('tradeName')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('customerName')}>Müşteri{sortGlyph('customerName')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('channel')}>Satış Kanalı{sortGlyph('channel')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('segment')}>Segment{sortGlyph('segment')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('representative')}>Satış Temsilcisi{sortGlyph('representative')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('chief')}>Satış Şefi{sortGlyph('chief')}</button></th>
+            <th><button type="button" onClick={() => toggleSort('status')}>Durum{sortGlyph('status')}</button></th>
+          </tr></thead>
+          <tbody>{customerPage.rows.map((customer) => <tr key={customer.customerId} tabIndex={0} role="button" aria-label={`${display(customer.tradeName)} müşteri detayını aç`} onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; onOpen(customer, event.currentTarget) }} onKeyDown={(event) => handleRowKey(event, customer)}>
+            <td className="customer-id-sticky-v7"><button className="copy-customer-id-v7" type="button" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button></td>
+            <td><strong className="table-trade-v7" title={display(customer.tradeName)}>{display(customer.tradeName)}</strong></td>
+            <td><div className="customer-name-v7"><span>{initials(customer.customerName)}</span><strong title={display(customer.customerName)}>{display(customer.customerName)}</strong></div></td>
+            <td><ChannelBadge channel={customer.channel} /></td>
+            <td><span className="segment-badge-v7">{display(customer.segment)}</span></td>
+            <td><PersonCell value={customer.representative} /></td>
+            <td><strong className="chief-name-v7">{personName(customer.chief)}</strong></td>
+            <td><StatusBadge status={customer.status} /></td>
+          </tr>)}</tbody>
+        </table>
+        {!loading && !customerPage.rows.length ? <div className="customer-empty-v7"><span>⌕</span><strong>Eşleşen müşteri bulunamadı.</strong><small>Arama veya filtreleri temizleyip tekrar deneyin.</small></div> : null}
+      </div>
+
+      <div className="customer-mobile-list-v7">{customerPage.rows.map((customer) => <article key={customer.customerId} className="customer-mobile-card-v7" tabIndex={0} role="button" onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; onOpen(customer, event.currentTarget) }} onKeyDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer, event.currentTarget) } }}>
+        <div className="mobile-card-head-v7"><button type="button" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button><StatusBadge status={customer.status} /></div>
+        <h3>{display(customer.tradeName)}</h3>
+        <p>{display(customer.customerName)}</p>
+        <div className="mobile-card-facts-v7"><div><span>Satış Kanalı</span><ChannelBadge channel={customer.channel} /></div><div><span>Segment</span><strong>{display(customer.segment)}</strong></div></div>
+        <div className="mobile-representative-v7"><span>Satış Temsilcisi</span><strong>{personName(customer.representative)}</strong></div>
+        <div className="mobile-card-foot-v7"><span>Detayda satış şefi ve tüm alanlar</span><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(customer, event.currentTarget) }}>Detay ›</button></div>
+      </article>)}</div>
+
+      <div className="customer-pagination-v7"><span>{page + 1} / {pages} sayfa</span><div><button type="button" disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>‹ Önceki</button><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Sonraki ›</button></div></div>
+    </section>
+  </>
 }
 
-function OrganizationView({ customers, loading, error, selection, setSelection, selectedCustomers, onDrill }: { customers: CustomerRecord[]; loading: boolean; error: string; selection: { chief: string | null; representative: string | null }; setSelection: (selection: { chief: string | null; representative: string | null }) => void; selectedCustomers: CustomerRecord[]; onDrill: (chief: string | null, representative: string | null) => void }) { const chiefs = [...new Set(customers.map((customer) => customer.chief).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr')); const reps = [...new Set(customers.filter((customer) => !selection.chief || customer.chief === selection.chief).map((customer) => customer.representative).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr')); const channelCounts = counts(selectedCustomers.map((customer) => customer.channel)); const segmentCounts = counts(selectedCustomers.map((customer) => customer.segment).filter((value): value is string => Boolean(value))); if (loading) return <div className="customer-state" role="status">Organizasyon verisi yükleniyor…</div>; if (error) return <div className="notice error" role="alert">Organizasyon verisi yüklenemedi. {error}</div>; if (!customers.length) return <div className="customer-state"><strong>Organizasyon verisi yok.</strong></div>; if (!selection.chief) return <div className="customer-state"><strong>Çözülmüş organizasyon eşleşmesi bulunmuyor.</strong></div>; return <div className="organization-layout"><aside className="organization-tree" aria-label="Organizasyon hiyerarşisi"><div className="organization-tree-head"><span className="eyebrow">HİYERARŞİ</span><strong>Dist. Satış Şefi</strong></div>{chiefs.map((chief) => <div key={chief} className="organization-chief"><button type="button" className={selection.chief === chief && !selection.representative ? 'org-node selected' : 'org-node'} onClick={() => setSelection({ chief, representative: null })}><span>›</span>{chief}</button>{selection.chief === chief ? <div className="organization-reps">{reps.map((rep) => <button type="button" key={rep} className={selection.representative === rep ? 'org-rep selected' : 'org-rep'} onClick={() => setSelection({ chief, representative: rep })}>{rep}<small>{customers.filter((customer) => customer.chief === chief && customer.representative === rep).length} müşteri</small></button>)}</div> : null}</div>)}</aside><main className="organization-detail"><div className="organization-detail-head"><div className="customer-avatar large">{initials(selection.representative || selection.chief)}</div><div><span className="eyebrow">ORGANİZASYON GÖRÜNÜMÜ</span><h2>{selection.representative || selection.chief || '—'}</h2><p>{selection.representative ? `Satış Temsilcisi · ${selection.chief ?? '—'}` : 'Dist. Satış Şefi · müşteri portföyü'}</p></div><button type="button" className="primary-button" onClick={() => onDrill(selection.chief, selection.representative)}>Bu müşterileri aç</button></div><div className="organization-stats"><article><span>Müşteri</span><strong>{selectedCustomers.length.toLocaleString('tr-TR')}</strong></article><article><span>Kanal</span><strong>{channelCounts.length}</strong></article><article><span>Segment</span><strong>{segmentCounts.length}</strong></article></div><div className="organization-distributions"><Distribution title="Satış kanalı" items={channelCounts} /><Distribution title="Segment" items={segmentCounts} /></div><section className="organization-portfolio"><div className="section-heading"><div><h3>Temsilci portföyü</h3><p>Mevcut resolved müşteri alanlarından gösterilir.</p></div></div><div className="organization-portfolio-table"><table><thead><tr><th>Temsilci</th><th>Müşteri</th><th>Aktif</th><th>Pasif</th><th>İptal</th><th /></tr></thead><tbody>{reps.map((rep) => { const rows = customers.filter((customer) => customer.representative === rep && (!selection.chief || customer.chief === selection.chief)); return <tr key={rep}><td>{rep}</td><td>{rows.length}</td><td>{rows.filter((row) => row.status === 'ACTIVE').length}</td><td>{rows.filter((row) => row.status === 'PASSIVE').length}</td><td>{rows.filter((row) => row.status === 'CANCELLED').length}</td><td><button type="button" className="link-button" onClick={() => onDrill(selection.chief, rep)}>Müşteriler</button></td></tr> })}</tbody></table></div></section></main></div> }
-function Distribution({ title, items }: { title: string; items: [string, number][] }) { const max = Math.max(1, ...items.map(([, count]) => count)); return <section className="distribution"><h3>{title}</h3>{items.map(([label, count]) => <div key={label}><div><span>{label}</span><strong>{count}</strong></div><span className="distribution-track"><i style={{ width: `${(count / max) * 100}%` }} /></span></div>)}</section> }
-function CustomerDrawer({ admin, customer, tab, setTab, provenance, provenanceLoading, provenanceError, onClose, onCopy, onOrganization }: { admin: boolean; customer: CustomerRecord; tab: 'summary' | 'organization' | 'source'; setTab: (tab: 'summary' | 'organization' | 'source') => void; provenance: CustomerProvenance | null; provenanceLoading: boolean; provenanceError: string; onClose: () => void; onCopy: (id: string) => void; onOrganization: () => void }) { const drawerRef = useRef<HTMLElement>(null); useEffect(() => { const drawer = drawerRef.current; if (!drawer) return; const focusable = () => [...drawer.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]; focusable()[0]?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); if (event.key === 'Tab') { const items = focusable(); if (!items.length) return; const first = items[0]; const last = items[items.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() } } }; drawer.addEventListener('keydown', onKey); return () => drawer.removeEventListener('keydown', onKey) }, [onClose]); return <><button className="drawer-backdrop" type="button" aria-label="Detayı kapat" onClick={onClose} /><aside ref={drawerRef} className="customer-drawer" role="dialog" aria-modal="true" aria-labelledby="customer-drawer-title"><button type="button" className="drawer-close" aria-label="Detayı kapat" onClick={onClose}>×</button><div className="drawer-identity"><span className="customer-avatar large">{initials(customer.customerName)}</span><div><span className="eyebrow">RESOLVED MÜŞTERİ</span><h2 id="customer-drawer-title">{display(customer.customerName)}</h2><span>{customer.customerId}</span></div></div><div className="drawer-tabs" role="tablist" aria-label="Müşteri detayı"><button type="button" role="tab" aria-selected={tab === 'summary'} className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>Özet</button><button type="button" role="tab" aria-selected={tab === 'organization'} className={tab === 'organization' ? 'active' : ''} onClick={() => setTab('organization')}>Organizasyon</button>{admin ? <button type="button" role="tab" aria-selected={tab === 'source'} className={tab === 'source' ? 'active' : ''} onClick={() => setTab('source')}>Kaynak</button> : null}</div>{tab === 'summary' ? <div className="drawer-content"><KeyValue label="Müşteri No" value={<span className="drawer-copy"><strong>{customer.customerId}</strong><button type="button" className="link-button" onClick={() => onCopy(customer.customerId)}>Kopyala</button></span>} /><KeyValue label="Müşteri Adı" value={display(customer.customerName)} /><KeyValue label="Tabela" value={display(customer.tradeName)} /><KeyValue label="Durum" value={customer.status} /><KeyValue label="Satış Kanalı" value={customer.channel} /><KeyValue label="Segment" value={display(customer.segment)} /></div> : tab === 'organization' ? <div className="drawer-content"><KeyValue label="Satış Temsilcisi" value={display(customer.representative)} /><KeyValue label="Dist. Satış Şefi" value={display(customer.chief)} /><button type="button" className="primary-button drawer-action" onClick={onOrganization} disabled={!customer.chief || !customer.representative}>{customer.chief && customer.representative ? 'Organizasyonda aç' : 'Çözülmüş organizasyon eşleşmesi bulunmuyor.'}</button></div> : <div className="drawer-content">{provenanceLoading ? <div className="customer-state">Kaynak bilgisi yükleniyor…</div> : provenanceError ? <div className="notice error" role="alert">Kaynak bilgisi okunamadı. {provenanceError}</div> : provenance ? <><KeyValue label="Snapshot" value={provenance.snapshotId} /><KeyValue label="Source batch" value={provenance.batchId} /><KeyValue label="Contract" value={provenance.contract} /><KeyValue label="Publication" value={provenance.publication} /><KeyValue label="Durum" value={`${provenance.status}${provenance.matched ? ' · MATCHED' : ''}`} /></> : <div className="customer-state">Kaynak bilgisi bulunamadı.</div>}</div>}</aside></> }
-function KeyValue({ label, value }: { label: string; value: ReactNode }) { return <div className="customer-key-value"><span>{label}</span><strong>{value}</strong></div> }; function filterLabel(key: FilterKey) { return ({ status: 'Durum', channel: 'Satış Kanalı', segment: 'Segment', representative: 'Satış Temsilcisi', chief: 'Dist. Satış Şefi' }[key]) }; function counts(values: string[]) { const result = new Map<string, number>(); values.forEach((value) => result.set(value, (result.get(value) ?? 0) + 1)); return [...result.entries()].sort((a, b) => b[1] - a[1]) }; function loadPreference<T>(key: string, fallback: T): T { try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) as T : fallback } catch { return fallback } }; function savePreference<T>(key: string, value: T) { try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* optional preference */ } }
+function FilterSelect({ label, value, values, onChange, displayValue = (item: string) => item }: { label: string; value: string; values: string[]; onChange: (value: string) => void; displayValue?: (value: string) => string }) {
+  return <label className="customer-filter-v7"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Tümü</option>{values.map((item) => <option key={item} value={item}>{displayValue(item)}</option>)}</select></label>
+}
+
+function ActiveFilterChips({ filters, onFilter }: { filters: CustomerFilters; onFilter: (key: keyof CustomerFilters, value: string) => void }) {
+  const labels: Record<keyof CustomerFilters, string> = { search: 'Arama', status: 'Durum', channel: 'Satış Kanalı', segment: 'Segment', representative: 'Satış Temsilcisi', chief: 'Satış Şefi' }
+  const items = (Object.entries(filters) as [keyof CustomerFilters, string][]).filter(([, value]) => Boolean(value))
+  if (!items.length) return null
+  const renderValue = (key: keyof CustomerFilters, value: string) => key === 'status' ? statusLabel(value) : key === 'channel' ? channelLabel(value) : key === 'representative' || key === 'chief' ? personName(value) : value
+  return <div className="active-filter-row-v7"><span>Aktif filtreler</span><div>{items.map(([key, value]) => <button type="button" key={key} onClick={() => onFilter(key, '')}>{labels[key]}: {renderValue(key, value)} <b>×</b></button>)}</div></div>
+}
+
+function ChannelBadge({ channel }: { channel: string }) { return <span className={`channel-badge-v7 ${channelClass(channel)}`}><i />{channelLabel(channel)}</span> }
+function StatusBadge({ status }: { status: string }) { return <span className={`status-badge-v7 ${statusClass(status)}`}>{statusLabel(status)}</span> }
+function PersonCell({ value }: { value: string | null }) { return <div className="person-cell-v7"><span>{initials(personName(value))}</span><strong title={personName(value)}>{personName(value)}</strong></div> }
+
+function OrganizationView({ customers, loading, error, chiefs, selection, setSelection, onDrill }: {
+  customers: CustomerRecord[]
+  loading: boolean
+  error: string
+  chiefs: string[]
+  selection: OrgSelection
+  setSelection: (selection: OrgSelection) => void
+  onDrill: (chief: string | null, representative: string | null) => void
+}) {
+  if (loading) return <div className="customer-state-v7" role="status">Organizasyon verisi yükleniyor…</div>
+  if (error) return <div className="customer-notice-v7 error" role="alert">Organizasyon verisi yüklenemedi. {error}</div>
+  if (!customers.length || !selection.chief) return <div className="customer-state-v7"><strong>Çözülmüş organizasyon eşleşmesi bulunmuyor.</strong></div>
+
+  const chiefCustomers = customers.filter((customer) => customer.chief === selection.chief)
+  const reps = [...new Set(chiefCustomers.map((customer) => customer.representative).filter((value): value is string => Boolean(value)))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr'))
+  const selectedCustomers = selection.representative ? chiefCustomers.filter((customer) => customer.representative === selection.representative) : chiefCustomers
+  const channelCounts = new Map(counts(selectedCustomers.map((customer) => customer.channel)))
+  const open = channelCounts.get('OPEN') ?? 0
+  const closed = channelCounts.get('CLOSED') ?? 0
+  const openPct = selectedCustomers.length ? Math.round(open / selectedCustomers.length * 100) : 0
+  const segmentCounts = counts(selectedCustomers.map((customer) => customer.segment).filter((value): value is string => Boolean(value)))
+  const maxSegment = Math.max(1, ...segmentCounts.map(([, value]) => value))
+  const selectedName = selection.representative ?? selection.chief
+
+  return <section className="organization-v7">
+    <header className="organization-head-v7"><div><span>SATIŞ ORGANİZASYONU</span><h2>Şef ve temsilci portföyleri</h2><p>%90 kuralıyla çözümlenmiş authoritative organizasyonu müşteri dağılımlarıyla inceleyin.</p></div><div><small>Çözümlenmiş organizasyon</small><strong>{new Set(customers.map((customer) => customer.representative)).size} temsilci · {customers.length.toLocaleString('tr-TR')} aktif müşteri</strong></div></header>
+
+    <div className="chief-switcher-v7">{chiefs.map((chief) => {
+      const rows = customers.filter((customer) => customer.chief === chief)
+      const repCount = new Set(rows.map((customer) => customer.representative)).size
+      return <button key={chief} type="button" className={selection.chief === chief ? 'active' : ''} onClick={() => setSelection({ chief, representative: null })}><span>{initials(personName(chief))}</span><div><strong>{personName(chief)}</strong><small>{repCount} temsilci · {rows.length} aktif müşteri</small></div><b>›</b></button>
+    })}</div>
+
+    <div className="organization-scope-v7"><span>Seçili kapsam</span><strong>{personName(selection.chief)}</strong><b>›</b><strong>{selection.representative ? personName(selection.representative) : 'Tüm temsilciler'}</strong><em>{selectedCustomers.length} aktif müşteri</em></div>
+
+    <div className="organization-overview-v7">
+      <article className="organization-spotlight-v7"><div className="spotlight-head-v7"><div className="spotlight-person-v7"><span>{initials(personName(selectedName))}</span><div><small>{selection.representative ? 'Satış Temsilcisi' : 'Satış Şefi'}</small><h3>{personName(selectedName)}</h3><p>{selection.representative ? `${personName(selection.chief)} ekibi · temsilci portföyü` : `${reps.length} satış temsilcisi`}</p></div></div><button type="button" onClick={() => onDrill(selection.chief, selection.representative)}>{selection.representative ? 'Temsilci müşterileri' : 'Şef müşterileri'} ↗</button></div><div className="spotlight-metrics-v7"><div><span>Aktif müşteri</span><strong>{selectedCustomers.length}</strong></div><div><span>Açık Kanal</span><strong>{open}</strong></div><div><span>Kapalı Kanal</span><strong>{closed}</strong></div></div></article>
+
+      <article className="organization-channel-v7"><header><strong>Satış kanalı dağılımı</strong><span>Aktif müşteri portföyü</span></header><div className="donut-row-v7"><div className="donut-v7" style={{ '--open-pct': `${openPct}%` } as CSSProperties}><div><strong>{openPct}%</strong><span>Açık</span></div></div><div className="channel-legend-v7"><div><i className="open" /><span>Açık Kanal</span><strong>{open}</strong></div><div><i className="closed" /><span>Kapalı Kanal</span><strong>{closed}</strong></div></div></div></article>
+
+      <article className="organization-segment-v7"><header><strong>Segment dağılımı</strong><span>Müşteri hacim segmenti</span></header><div className="segment-bars-v7">{segmentCounts.map(([label, value]) => <div key={label}><span>{label}</span><i><b style={{ width: `${Math.round(value / maxSegment * 100)}%` }} /></i><strong>{value}</strong></div>)}</div></article>
+    </div>
+
+    <section className="representative-roster-v7"><header><div><span>EKİP</span><h3>Satış temsilcileri</h3><p>Bir temsilci seçin; üstteki kanal ve segment analizi seçilen portföye göre güncellensin.</p></div><strong>{reps.length} temsilci</strong></header><div>{reps.map((rep) => {
+      const rows = chiefCustomers.filter((customer) => customer.representative === rep)
+      const selected = selection.representative === rep
+      return <div key={rep} className={`representative-row-v7 ${selected ? 'selected' : ''}`} role="button" tabIndex={0} aria-pressed={selected} onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; setSelection({ chief: selection.chief, representative: selected ? null : rep }) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelection({ chief: selection.chief, representative: selected ? null : rep }) } }}>
+        <div className="representative-identity-v7"><span className="representative-person-icon-v7" aria-hidden="true"><PersonIcon /></span><div><small>SATIŞ TEMSİLCİSİ</small><strong>{personName(rep)}</strong></div></div>
+        <div className="representative-count-v7"><strong>{rows.length}</strong><span>aktif müşteri</span></div>
+        <span className="representative-state-v7">{selected ? '✓ Seçili' : 'Dağılımı gör'}</span>
+        <button type="button" onClick={() => onDrill(selection.chief, rep)}>Müşterileri aç ↗</button>
+      </div>
+    })}</div></section>
+  </section>
+}
+
+function PersonIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4.5 20c.8-4 3.2-6 7.5-6s6.7 2 7.5 6"/></svg> }
+
+function CustomerDrawer({ admin, customer, provenance, provenanceLoading, provenanceError, onClose, onCopy, onOrganization }: {
+  admin: boolean
+  customer: CustomerRecord
+  provenance: CustomerProvenance | null
+  provenanceLoading: boolean
+  provenanceError: string
+  onClose: () => void
+  onCopy: (id: string) => void
+  onOrganization: () => void
+}) {
+  const drawerRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const drawer = drawerRef.current
+    if (!drawer) return
+    const scrollY = window.scrollY
+    const previous = { position: document.body.style.position, top: document.body.style.top, left: document.body.style.left, right: document.body.style.right, width: document.body.style.width, overflow: document.body.style.overflow }
+    document.body.classList.add('customer-drawer-scroll-locked')
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.left = '0'
+    document.body.style.right = '0'
+    document.body.style.width = '100%'
+    document.body.style.overflow = 'hidden'
+
+    const focusable = () => [...drawer.querySelectorAll<HTMLElement>('button, summary, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    focusable()[0]?.focus()
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (!items.length) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    drawer.addEventListener('keydown', onKey)
+    return () => {
+      drawer.removeEventListener('keydown', onKey)
+      document.body.classList.remove('customer-drawer-scroll-locked')
+      Object.assign(document.body.style, previous)
+      window.scrollTo(0, scrollY)
+    }
+  }, [onClose])
+
+  return <>
+    <button className="customer-drawer-backdrop-v7" type="button" aria-label="Müşteri detayını kapat" onClick={onClose} />
+    <aside ref={drawerRef} className="customer-drawer-v7" role="dialog" aria-modal="true" aria-labelledby="customer-drawer-title-v7">
+      <div className="drawer-topbar-v7"><div><span>RESOLVED MÜŞTERİ</span><strong>Portföy detayı</strong></div><button type="button" aria-label="Müşteri detayını kapat" onClick={onClose}>×</button></div>
+      <div className="drawer-body-v7">
+        <section className="drawer-hero-v7">
+          <div className="drawer-hero-head-v7"><div><span>Tabela</span><h2 id="customer-drawer-title-v7">{display(customer.tradeName)}</h2><p>{display(customer.customerName)}</p></div><em>● LIVE</em></div>
+          <div className="drawer-badges-v7"><StatusBadge status={customer.status} /><ChannelBadge channel={customer.channel} /><span className="drawer-segment-v7">{display(customer.segment)}</span></div>
+          <div className="drawer-number-v7"><span>Müşteri No</span><strong>{customer.customerId}</strong><button type="button" onClick={() => onCopy(customer.customerId)}>Kopyala</button></div>
+        </section>
+
+        <section className="drawer-section-v7"><header><span>ORGANİZASYON</span><h3>Bu müşteri kime bağlı?</h3></header><div className="drawer-org-chain-v7"><div className="chief"><span>Satış Şefi</span><strong>{personName(customer.chief)}</strong></div><b>›</b><div className="rep"><span>Satış Temsilcisi</span><strong>{personName(customer.representative)}</strong></div><b>›</b><div><span>Müşteri</span><strong>{display(customer.tradeName)}</strong></div></div>{customer.chief && customer.representative ? <button className="drawer-org-action-v7" type="button" onClick={onOrganization}>Organizasyonda aç ↗</button> : null}</section>
+
+        <section className="drawer-section-v7"><header><span>HIZLI BAKIŞ</span><h3>Müşteri sınıflandırması</h3></header><div className="drawer-facts-v7"><article><span>Durum</span><strong>{statusLabel(customer.status)}</strong></article><article><span>Satış Kanalı</span><strong>{channelLabel(customer.channel)}</strong></article><article><span>Segment</span><strong>{display(customer.segment)}</strong></article><article><span>Satış Temsilcisi</span><strong>{personName(customer.representative)}</strong></article></div></section>
+
+        {admin ? <details className="drawer-provenance-v7"><summary><span><b>Kaynak & provenance</b><small>Teknik izleme bilgileri</small></span><em>⌄</em></summary><div>{provenanceLoading ? <p>Kaynak bilgisi yükleniyor…</p> : provenanceError ? <p className="error">Kaynak bilgisi okunamadı. {provenanceError}</p> : provenance ? <div className="provenance-grid-v7"><ProvenanceTile label="Snapshot" value={provenance.snapshotId} /><ProvenanceTile label="Source batch" value={provenance.batchId} /><ProvenanceTile label="Contract" value={provenance.contract} /><ProvenanceTile label="Publication" value={`${provenance.status}${provenance.matched ? ' / MATCHED' : ''}`} /></div> : <p>Kaynak bilgisi bulunamadı.</p>}</div></details> : null}
+        <p className="drawer-readonly-v7">Bu yüzey read-only müşteri keşfi içindir; manuel müşteri düzenleme akışı içermez.</p>
+      </div>
+    </aside>
+  </>
+}
+
+function ProvenanceTile({ label, value }: { label: string; value: ReactNode }) { return <article><span>{label}</span><strong>{value}</strong></article> }

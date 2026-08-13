@@ -51,6 +51,18 @@ describe('customer filter option universe', () => {
     expect(options.chief).toEqual(['Şef A', 'Şef B', 'Şef Ç'])
     expect(options.representative).not.toContain('Source Observation Only')
   })
+
+  it('exposes representative/chief filters only from the authoritative active hierarchy', () => {
+    const options = getCustomerFilterOptions([
+      ...resolvedCustomers,
+      { ...resolvedCustomers[0], customerId: '004', representative: 'Raw Only Rep', chief: null },
+      { ...resolvedCustomers[0], customerId: '005', status: 'PASSIVE', representative: 'Passive Rep', chief: 'Passive Chief' },
+    ])
+
+    expect(options.representative).not.toContain('Raw Only Rep')
+    expect(options.representative).not.toContain('Passive Rep')
+    expect(options.chief).not.toContain('Passive Chief')
+  })
 })
 
 describe('viewer-safe customer filtering', () => {

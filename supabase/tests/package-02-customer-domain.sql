@@ -377,6 +377,14 @@ begin
   perform pg_temp.assert_true(exists (select 1 from public.customer_representative_ssm_resolutions r join public.customer_representatives cr on cr.id=r.representative_id where cr.normalized_name='rep above' and r.snapshot_id=v_snapshot_id and r.canonical_ssm='SSM A' and r.resolution_state='RESOLVED'), 'historical SSM resolution remains auditable');
   perform pg_temp.assert_true((select customer_name='Alpha New' and active_snapshot_id=v_snapshot_two_id from public.customers where customer_id='500001'), 'older snapshot re-resolution cannot overwrite current canonical state');
   perform pg_temp.assert_true((select current_snapshot_state='NOT_PRESENT_IN_CURRENT_MASTER' from public.customers where customer_id='500002'), 'missing current customer remains distinct from status');
+  perform pg_temp.assert_true(
+    public.customer_business_display_name('ESRA ARİ Esra Ari') = 'Esra Ari'
+    and public.customer_business_display_name('OSMAN ÖKTEN Osman Ökten') = 'Osman Ökten'
+    and public.customer_business_display_name('HASAN AKIN Hasan Akın') = 'Hasan Akın'
+    and public.customer_business_display_name('ÖZDEN ÖZTEKİN ORTAKLIĞI Özden Öztekin') = 'ÖZDEN ÖZTEKİN ORTAKLIĞI Özden Öztekin'
+    and public.customer_business_display_name('FARUK NAZİF KILIÇ Faruk Nafiz Kılıç') = 'FARUK NAZİF KILIÇ Faruk Nafiz Kılıç',
+    'business display name removes only repeated-half source names and preserves meaningful company/person strings'
+  );
 
   reset role; set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_viewer_id::text, true);
   perform pg_temp.assert_true(
@@ -395,7 +403,7 @@ begin
     'viewer cannot directly read Package 02 technical base tables'
   );
   perform pg_temp.assert_true(
-    (select representative = 'rep above' and chief = 'SSM B'
+    (select representative = 'Rep Above' and chief = 'SSM B'
      from public.read_current_customer_business_surface() where customer_id = '500001'),
     'viewer safe business surface returns resolved representative and chief values'
   );

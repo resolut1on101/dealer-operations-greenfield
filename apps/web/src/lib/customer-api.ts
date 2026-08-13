@@ -59,8 +59,14 @@ export function filterCustomers(rows: CustomerRecord[], filters: CustomerFilters
 }
 
 export function getCustomerFilterOptions(rows: CustomerRecord[]): CustomerFilterOptions {
-  const optionValues = (field: keyof CustomerFilterOptions) => [...new Set(rows.map((row) => row[field]).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr'))
-  return { status: optionValues('status'), channel: optionValues('channel'), segment: optionValues('segment'), representative: optionValues('representative'), chief: optionValues('chief') }
+  const optionValues = (field: 'status' | 'channel' | 'segment') => [...new Set(rows.map((row) => row[field]).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr'))
+  // Representative/chief options must come only from the authoritative ACTIVE hierarchy.
+  // A raw or resolved representative without a materialized canonical chief is not a valid
+  // organization/filter choice for P02U.
+  const authoritativeOrganizationRows = rows.filter((row) => row.status === 'ACTIVE' && row.representative && row.chief)
+  const representatives = [...new Set(authoritativeOrganizationRows.map((row) => row.representative).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr'))
+  const chiefs = [...new Set(authoritativeOrganizationRows.map((row) => row.chief).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'tr'))
+  return { status: optionValues('status'), channel: optionValues('channel'), segment: optionValues('segment'), representative: representatives, chief: chiefs }
 }
 export async function listCustomerFilterOptions(): Promise<CustomerFilterOptions> { return getCustomerFilterOptions(await listAllCustomers()) }
 export async function listCustomerFilterValues(field: keyof CustomerFilterOptions) { return (await listCustomerFilterOptions())[field] }

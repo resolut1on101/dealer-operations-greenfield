@@ -15,7 +15,7 @@ export const releasePackage = packageIdentifierSchema.parse(
   import.meta.env.VITE_RELEASE_PACKAGE ?? '02U',
 )
 export const buildVersion = import.meta.env.VITE_BUILD_VERSION ?? 'dev'
-export const databaseMigrationVersion = import.meta.env.VITE_DB_MIGRATION_VERSION ?? '20260810000009'
+export const databaseMigrationVersion = import.meta.env.VITE_DB_MIGRATION_VERSION ?? '20260813000012'
 
 export const supabaseConfiguration = {
   url: import.meta.env.VITE_SUPABASE_URL,
