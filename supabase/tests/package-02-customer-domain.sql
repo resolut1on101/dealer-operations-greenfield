@@ -289,6 +289,30 @@ begin
     (select canonical_ssm is null and ssm_resolution_state='UNRESOLVED' from public.customers where customer_id='500006'),
     'resolving a representative does not mutate a conflicting representative identity'
   );
+  reset role;
+  update public.customer_resolutions
+  set status='PASSIVE', ssm_resolution_state='UNRESOLVED'
+  where snapshot_id=v_snapshot_id and customer_id='500001';
+  update public.customers
+  set status='PASSIVE', canonical_ssm=null, ssm_resolution_state='UNRESOLVED'
+  where customer_id='500001';
+  set local role authenticated;
+  v_result := public.resolve_representative_ssm('Rep Above', v_snapshot_id);
+  perform pg_temp.assert_true(
+    (v_result->>'state'='RESOLVED' and (v_result->>'known_active_count')::bigint=10)
+    and (select count(*)=10 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id where c.active_snapshot_id=v_snapshot_id and cr.representative_id=(select id from public.customer_representatives where normalized_name='rep above') and cr.status='ACTIVE' and c.canonical_ssm='SSM A')
+    and (select canonical_ssm is null from public.customers where customer_id='500001'),
+    'inactive same-representative customer is excluded from SSM materialization'
+  );
+  reset role;
+  update public.customer_resolutions
+  set status='ACTIVE', ssm_resolution_state='UNRESOLVED'
+  where snapshot_id=v_snapshot_id and customer_id='500001';
+  update public.customers
+  set status='ACTIVE', canonical_ssm=null, ssm_resolution_state='UNRESOLVED'
+  where customer_id='500001';
+  set local role authenticated;
+  v_result := public.resolve_representative_ssm('Rep Above', v_snapshot_id);
   v_result := public.resolve_representative_ssm('Rep Below', v_snapshot_id); perform pg_temp.assert_true(v_result->>'state'='MANUAL_REVIEW' and (v_result->>'dominant_ratio')::numeric < .9, 'below 90 percent requires review');
   perform pg_temp.assert_true(
     (select count(*) = 11 from public.customers c join public.customer_resolutions cr on cr.customer_id=c.customer_id and cr.snapshot_id=c.active_snapshot_id join public.customer_representatives r on r.id=cr.representative_id where c.active_snapshot_id=v_snapshot_id and r.normalized_name='rep above' and c.canonical_ssm='SSM A' and c.ssm_resolution_state='RESOLVED')
