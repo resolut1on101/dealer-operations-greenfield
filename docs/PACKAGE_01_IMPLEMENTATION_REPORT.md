@@ -1,6 +1,6 @@
 # Package 01 Implementation Report — Reliable High-Volume Import and Publication Engine
 
-**Status:** `AUTOMATED_TESTS_PASSED / NOT_DEPLOYED / AWAITING_USER_ACCEPTANCE`
+**Status:** `VERIFIED / ACCEPTED`
 **Scope:** Package 01 only. Package 01U UI and all domain adapters remain out of scope.
 
 ## Delivered
@@ -33,6 +33,6 @@ Synthetic local measurements (Docker/PostgreSQL, test transaction rolled back):
 
 The 10K measurement includes local runtime variability and is retained as observed evidence, not a performance guarantee. No per-row HTTP or per-row database mutation is used by the Package 01 transport contract.
 
-## Remaining acceptance work
+## Acceptance status
 
-Package 01 is not `ACCEPTED`. Per the live protocol, it still requires a live deployment, a real 10K+ Excel file, source-to-database control-total comparison, interrupted-upload resume, duplicate re-upload, another browser/device viewer check, paginated drill-down, Storage/DB/egress delta measurement, and explicit user PASS. No live deployment was started in this package implementation.
+Package 01 live deployment and required user acceptance are complete. The package is `VERIFIED / ACCEPTED`; see `docs/PACKAGE_01_ACCEPTANCE.md` for the acceptance record.

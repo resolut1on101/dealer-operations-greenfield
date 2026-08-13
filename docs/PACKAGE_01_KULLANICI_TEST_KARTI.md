@@ -1,9 +1,9 @@
 # Package 01 Kullanıcı UAT Kartı
 
 Paket: `01 - Import, reconciliation ve publication`  
-Paket durumu: `LIVE_TESTING`  
+Paket durumu: `VERIFIED`
 UAT durumu: `HAZIR — kullanıcı testi bekleniyor`  
-Kabul durumu: `ACCEPTED DEĞİL`
+Kabul durumu: `ACCEPTED`
 
 ## Başlangıç kaydı
 
@@ -12,7 +12,7 @@ Kabul durumu: `ACCEPTED DEĞİL`
 - Uygulama: [canonical Pages URL](https://dealer-operations-greenfield.pages.dev).
 - Public frontend smoke: `PASS` — kullanıcı canonical proje URL'sini açarak doğruladı.
 - Hash'li deployment URL (`https://94396efa.dealer-operations-greenfield.pages.dev`): erişilemedi. Bu, canonical URL çalıştığı için non-blocking gözlemdir; yeni deploy gerektirmez.
-- Package 01, aşağıdaki zorunlu UAT kontrollerinin tamamı kullanıcı tarafından `PASS` verilmeden `ACCEPTED` yapılmayacaktır.
+- Package 01 zorunlu UAT kapsamı kullanıcı tarafından PASS olarak onaylandı; kabul kaydı `docs/PACKAGE_01_ACCEPTANCE.md` içindedir.
 
 ## Test ön koşulları
 
@@ -46,4 +46,4 @@ Storage/DB/egress gözlemi: `________________`
 Genel sonuç: `PASS / FAIL`  
 Notlar ve hata kanıtı: `________________`
 
-Tüm zorunlu maddeler `PASS` olmadan Package 01 kabul edilmez. Açık kullanıcı `PASS` kaydı sonrasında ayrı kabul kaydı hazırlanır; bu kart tek başına `ACCEPTED` anlamına gelmez.
+Tüm zorunlu maddeler kullanıcı tarafından PASS olarak onaylandı. Package 01 `ACCEPTED` durumundadır.
