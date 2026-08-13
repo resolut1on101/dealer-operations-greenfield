@@ -42,12 +42,9 @@ If the LIVE technical report proves the exact invariants above and the applicati
 
 `PASS`
 
-Only then:
-
-- `Package 03 = ACCEPTED`
+Result:
+- `Package 03 = ACCEPTED` (Approved on 2026-08-14)
+- `Technical release = PASS`
+- `Production UAT = PASS`
 - `Package 03U = UNBLOCKED`
 
-Until then:
-
-- `Package 03 = LIVE_TESTING`
-- `Package 03U = BLOCKED`
