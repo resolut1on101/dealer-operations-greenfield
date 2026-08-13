@@ -408,9 +408,17 @@ begin
     'viewer safe business surface returns resolved representative and chief values'
   );
   perform pg_temp.assert_true(
-    (select representative is null and chief is null
-     from public.read_current_customer_business_surface() where customer_id = '500006'),
-    'viewer safe business surface does not collapse conflicting or unresolved organization candidates'
+    not exists (
+      select 1
+      from public.read_current_customer_business_surface()
+      where customer_id = '500006'
+    )
+    and not exists (
+      select 1
+      from public.read_current_customer_business_surface()
+      where status <> 'ACTIVE' or representative is null or chief is null
+    ),
+    'viewer portfolio surface excludes inactive and unresolved organization candidates'
   );
   perform pg_temp.assert_true(
     (select count(*) = 8

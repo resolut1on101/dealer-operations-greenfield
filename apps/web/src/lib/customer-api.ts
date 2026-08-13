@@ -28,16 +28,18 @@ const sortFields: Record<CustomerSortKey, string> = { customerName: 'customer_na
 export type CustomerSortOrder = { field: string; ascending: boolean }
 export function getCustomerSortOrders(sort: CustomerSort): CustomerSortOrder[] { const primary = { field: sortFields[sort.key], ascending: sort.ascending }; return sort.key === 'customerId' ? [primary] : [primary, { field: 'customer_id', ascending: true }] }
 
+export function getPageRange(page: number, pageSize: number) { return { from: page * pageSize, to: page * pageSize + pageSize - 1 } }
+
 export async function listCustomers(filters: CustomerFilters, page: number, pageSize: number, sort: CustomerSort = { key: 'customerId', ascending: true }): Promise<CustomerPage> {
-  const from = page * pageSize
-  const to = from + pageSize - 1
+  const { from, to } = getPageRange(page, pageSize)
   // Supabase's generated RPC builder types omit the count overload even though the runtime supports it.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (api().rpc('read_current_customer_business_surface') as any).select('*', { count: 'exact' })
   for (const order of getCustomerSortOrders(sort)) query = query.order(order.field, { ascending: order.ascending })
   const search = filters.search.trim().replace(/[,()]/g, ' ')
   if (search) query = query.or(`customer_id.ilike.%${search}%,customer_name.ilike.%${search}%,trade_name.ilike.%${search}%`)
-  if (filters.status) query = query.eq('status', filters.status)
+  // Status is a database-enforced invariant of this surface; a stale saved UI
+  // preference must not turn the active portfolio into a client-side scope.
   if (filters.channel) query = query.eq('channel', filters.channel)
   if (filters.segment) query = query.eq('segment', filters.segment)
   if (filters.representative) query = query.eq('representative', filters.representative)

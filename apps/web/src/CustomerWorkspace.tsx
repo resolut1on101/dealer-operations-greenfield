@@ -71,7 +71,7 @@ function savePreference<T>(key: string, value: T) {
 export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
   const admin = role === 'admin'
   const [view, setView] = useState<View>('customers')
-  const [filters, setFilters] = useState(() => loadPreference('p02u-v7-filters', emptyFilters))
+  const [filters, setFilters] = useState(() => ({ ...loadPreference('p02u-v7-filters', emptyFilters), status: '' }))
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<CustomerSort>({ key: 'customerId', ascending: true })
   const [customerPage, setCustomerPage] = useState({ rows: [] as CustomerRecord[], count: 0 })
@@ -128,10 +128,8 @@ export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
   }, [applyCustomerUniverse])
   useEffect(() => { savePreference('p02u-v7-filters', filters) }, [filters])
 
-  const organizationCustomers = useMemo(
-    () => allCustomers.filter((customer) => customer.status === 'ACTIVE' && customer.representative && customer.chief),
-    [allCustomers],
-  )
+  // The database surface is already the canonical active, resolved portfolio.
+  const organizationCustomers = allCustomers
   const chiefs = useMemo(
     () => [...new Set(organizationCustomers.map((customer) => customer.chief).filter((value): value is string => Boolean(value)))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr')),
     [organizationCustomers],
@@ -275,8 +273,8 @@ function CustomerList(props: {
     loading, error, pages, page, setPage, sort, setSort, onOpen, onCopy, mobileFiltersOpen, setMobileFiltersOpen,
     activeFilterCount,
   } = props
-  const activeCount = allCustomers.filter((customer) => customer.status === 'ACTIVE').length
-  const organizedCount = allCustomers.filter((customer) => customer.status === 'ACTIVE' && customer.representative && customer.chief).length
+  const activeCount = allCustomers.length
+  const organizedCount = allCustomers.length
   const openCount = allCustomers.filter((customer) => customer.channel === 'OPEN').length
 
   function toggleSort(key: CustomerSortKey) {
@@ -308,7 +306,6 @@ function CustomerList(props: {
 
       <div className={`customer-filter-panel-v7 ${mobileFiltersOpen ? 'mobile-open' : ''}`}>
         <div className="mobile-filter-head-v7"><div><strong>Filtreler</strong><span>Sonuçları daraltın</span></div><button type="button" aria-label="Filtreleri kapat" onClick={() => setMobileFiltersOpen(false)}>×</button></div>
-        <FilterSelect label="Durum" value={filters.status} values={filterOptions?.status ?? []} displayValue={statusLabel} onChange={(value) => onFilter('status', value)} />
         <FilterSelect label="Satış Kanalı" value={filters.channel} values={filterOptions?.channel ?? []} displayValue={channelLabel} onChange={(value) => onFilter('channel', value)} />
         <FilterSelect label="Segment" value={filters.segment} values={filterOptions?.segment ?? []} onChange={(value) => onFilter('segment', value)} />
         <FilterSelect label="Satış Temsilcisi" value={filters.representative} values={filterOptions?.representative ?? []} displayValue={personName} onChange={(value) => onFilter('representative', value)} />
@@ -359,7 +356,7 @@ function CustomerList(props: {
         <div className="mobile-card-foot-v7"><span>Detayda satış şefi ve tüm alanlar</span><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(customer, event.currentTarget) }}>Detay ›</button></div>
       </article>)}</div>
 
-      <div className="customer-pagination-v7"><span>{page + 1} / {pages} sayfa</span><div><button type="button" disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>‹ Önceki</button><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Sonraki ›</button></div></div>
+      <div className="customer-pagination-v7"><span>{customerPage.count ? `${(page * PAGE_SIZE + 1).toLocaleString('tr-TR')}–${Math.min((page + 1) * PAGE_SIZE, customerPage.count).toLocaleString('tr-TR')} / ${customerPage.count.toLocaleString('tr-TR')}` : '0 / 0'} · {page + 1} / {pages} sayfa</span><div><button type="button" disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>‹ Önceki</button><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Sonraki ›</button></div></div>
     </section>
   </>
 }

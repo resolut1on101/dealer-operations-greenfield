@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterCustomers, getCustomerFilterOptions, getCustomerSortOrders, type CustomerFilters, type CustomerRecord } from './customer-api'
+import { filterCustomers, getCustomerFilterOptions, getCustomerSortOrders, getPageRange, type CustomerFilters, type CustomerRecord } from './customer-api'
 
 const resolvedCustomers: CustomerRecord[] = [
   { customerId: '001', customerName: 'Bir', tradeName: null, status: 'ACTIVE', channel: 'DIRECT', segment: 'A', representative: 'Rep A', chief: 'Şef A' },
@@ -78,5 +78,21 @@ describe('viewer-safe customer filtering', () => {
     expect(filterCustomers(resolvedCustomers, { ...empty, search: 'İKİ', chief: 'Şef B' }).map((row) => row.customerId)).toEqual(['002'])
     expect(filterCustomers(resolvedCustomers, { ...empty, representative: 'Rep B', chief: 'Şef B', status: 'ACTIVE', channel: 'DIRECT', segment: 'A', search: 'Üç' }).map((row) => row.customerId)).toEqual(['003'])
     expect(filterCustomers([{ ...resolvedCustomers[0], representative: null, chief: null }], { ...empty, representative: '' })[0].representative).toBeNull()
+  })
+})
+
+describe('server-pagination request boundaries', () => {
+  it('requests a distinct second page at the exact page-size boundary', () => {
+    expect(getPageRange(0, 50)).toEqual({ from: 0, to: 49 })
+    expect(getPageRange(1, 50)).toEqual({ from: 50, to: 99 })
+  })
+
+  it('covers every row exactly once with deterministic, non-overlapping ranges', () => {
+    const ranges = Array.from({ length: Math.ceil(1195 / 50) }, (_, page) => getPageRange(page, 50))
+    const positions = ranges.flatMap(({ from, to }) => Array.from({ length: Math.min(to, 1194) - from + 1 }, (_, index) => from + index))
+    expect(positions).toHaveLength(1195)
+    expect(new Set(positions)).toHaveLength(1195)
+    expect(positions[0]).toBe(0)
+    expect(positions.at(-1)).toBe(1194)
   })
 })
