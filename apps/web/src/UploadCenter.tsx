@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import type { ApplicationRole } from '@dealer-operations/contracts'
 import { DEFAULT_IMPORT_CHUNK_SIZE, type ImportWorkerResponse } from './lib/import-worker-protocol'
+import { parseSourceMatrix } from './lib/source-parser'
 import {
   createCandidate,
   createImportBatch,
@@ -94,9 +95,8 @@ async function recognizeSource(file: File, contracts: SourceContract[]): Promise
     if (!workbook.SheetNames.includes(contract.requiredSheet)) continue
     const sheet = workbook.Sheets[contract.requiredSheet]
     const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: true })
-    const headers = (matrix[0] ?? []).map((value) => String(value ?? '').trim()).filter(Boolean)
+    const { headers, rows } = parseSourceMatrix(matrix)
     if (!contract.requiredHeaders.every((header) => headers.includes(header))) continue
-    const rows = matrix.slice(1).filter((row) => row.some((value) => value !== null && value !== undefined && String(value).trim() !== '')).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? null])))
     const expectedControlTotals = Object.fromEntries(Object.entries(contract.controlTotalFields).map(([metric, field]) => {
       const scale = contract.controlTotalScales[metric]
       const total = rows.reduce((sum, row) => sum + (Number(row[field]) || 0), 0)

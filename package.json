@@ -27,7 +27,8 @@
     "review:zip": "node scripts/create-review-zip.mjs",
     "test:e2e": "playwright test",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "test:product-domain": "node scripts/test-package-03-product-domain.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
