@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterCustomers, getCustomerFilterOptions, getCustomerSortOrders, getPageRange, type CustomerFilters, type CustomerRecord } from './customer-api'
+import { filterCustomers, getCustomerFilterOptions, getCustomerPaginationItems, getCustomerSortOrders, getPageRange, mapPortfolioMetadata, reconcileCustomerFilters, requireExactCustomerCount, sanitizeCustomerSearchTerm, type CustomerFilters, type CustomerRecord } from './customer-api'
 
 const resolvedCustomers: CustomerRecord[] = [
   { customerId: '001', customerName: 'Bir', tradeName: null, status: 'ACTIVE', channel: 'DIRECT', segment: 'A', representative: 'Rep A', chief: 'Şef A' },
@@ -79,6 +79,12 @@ describe('viewer-safe customer filtering', () => {
     expect(filterCustomers(resolvedCustomers, { ...empty, representative: 'Rep B', chief: 'Şef B', status: 'ACTIVE', channel: 'DIRECT', segment: 'A', search: 'Üç' }).map((row) => row.customerId)).toEqual(['003'])
     expect(filterCustomers([{ ...resolvedCustomers[0], representative: null, chief: null }], { ...empty, representative: '' })[0].representative).toBeNull()
   })
+
+
+  it('searches representative and chief names, not just identity fields', () => {
+    expect(filterCustomers(resolvedCustomers, { ...empty, search: 'rep b' }).map((row) => row.customerId)).toEqual(['002', '003'])
+    expect(filterCustomers(resolvedCustomers, { ...empty, search: 'şef a' }).map((row) => row.customerId)).toEqual(['001'])
+  })
 })
 
 describe('server-pagination request boundaries', () => {
@@ -94,5 +100,66 @@ describe('server-pagination request boundaries', () => {
     expect(new Set(positions)).toHaveLength(1195)
     expect(positions[0]).toBe(0)
     expect(positions.at(-1)).toBe(1194)
+  })
+})
+
+
+describe('customer pagination metadata', () => {
+  it('never silently treats a page-length response as the total when exact count is missing', () => {
+    expect(() => requireExactCustomerCount(null)).toThrow('Müşteri toplam kayıt sayısı alınamadı.')
+    expect(requireExactCustomerCount(1195)).toBe(1195)
+  })
+
+  it('shows compact, directly clickable page numbers across a 24-page portfolio', () => {
+    expect(getCustomerPaginationItems(0, 24)).toEqual([0, 1, 'end-ellipsis', 23])
+    expect(getCustomerPaginationItems(11, 24)).toEqual([0, 'start-ellipsis', 10, 11, 12, 'end-ellipsis', 23])
+    expect(getCustomerPaginationItems(23, 24)).toEqual([0, 'start-ellipsis', 22, 23])
+  })
+})
+
+
+describe('portfolio metadata mapping', () => {
+  it('maps lightweight server metadata without needing the full customer universe', () => {
+    expect(mapPortfolioMetadata({
+      total_count: '1195',
+      open_count: 700,
+      closed_count: '495',
+      unclassified_count: 0,
+      channels: ['OPEN', 'CLOSED', 'OPEN'],
+      segments: ['B', 'A'],
+      representatives: ['Rep B', 'Rep A'],
+      chiefs: ['Şef B', 'Şef A'],
+    })).toEqual({
+      totalCount: 1195,
+      openCount: 700,
+      closedCount: 495,
+      unclassifiedCount: 0,
+      filterOptions: {
+        status: ['ACTIVE'],
+        channel: ['CLOSED', 'OPEN'],
+        segment: ['A', 'B'],
+        representative: ['Rep A', 'Rep B'],
+        chief: ['Şef A', 'Şef B'],
+      },
+    })
+  })
+
+  it('sanitizes PostgREST filter grammar and wildcard characters from free-text search', () => {
+    expect(sanitizeCustomerSearchTerm('  Rep (A), %_*  ')).toBe('Rep A')
+    expect(sanitizeCustomerSearchTerm('A.Ş.')).toBe('A.Ş.')
+  })
+})
+
+
+describe('saved customer filter reconciliation', () => {
+  it('drops stale hierarchy/filter values while preserving free-text search', () => {
+    const filters: CustomerFilters = { search: 'alpha', status: 'PASSIVE', channel: 'OLD', segment: 'A', representative: 'Former Rep', chief: 'Former Chief' }
+    expect(reconcileCustomerFilters(filters, {
+      status: ['ACTIVE'],
+      channel: ['OPEN', 'CLOSED'],
+      segment: ['A', 'B'],
+      representative: ['Rep A'],
+      chief: ['Şef A'],
+    })).toEqual({ search: 'alpha', status: '', channel: '', segment: 'A', representative: '', chief: '' })
   })
 })

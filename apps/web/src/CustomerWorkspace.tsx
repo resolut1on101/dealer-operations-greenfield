@@ -4,14 +4,18 @@ import { releasePackage } from './lib/environment'
 import {
   type CustomerFilters,
   type CustomerFilterOptions,
+  type CustomerOrganizationAggregate,
+  type CustomerPortfolioMetadata,
   type CustomerProvenance,
   type CustomerRecord,
   type CustomerSort,
   type CustomerSortKey,
-  getCustomerFilterOptions,
+  getCustomerPaginationItems,
+  getCustomerPortfolioMetadata,
   getCustomerProvenance,
-  listAllCustomers,
+  listCustomerOrganizationAggregates,
   listCustomers,
+  reconcileCustomerFilters,
 } from './lib/customer-api'
 
 const PAGE_SIZE = 50
@@ -56,16 +60,22 @@ function copyValue(value: string, onCopied: () => void) {
     .then(onCopied)
     .catch(() => undefined)
 }
-function counts(values: string[]) {
-  const result = new Map<string, number>()
-  values.forEach((value) => result.set(value, (result.get(value) ?? 0) + 1))
-  return [...result.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'))
-}
 function loadPreference<T>(key: string, fallback: T): T {
   try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) as T : fallback } catch { return fallback }
 }
 function savePreference<T>(key: string, value: T) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* optional preference */ }
+}
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const update = () => setMatches(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [query])
+  return matches
 }
 
 export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
@@ -75,11 +85,14 @@ export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<CustomerSort>({ key: 'customerId', ascending: true })
   const [customerPage, setCustomerPage] = useState({ rows: [] as CustomerRecord[], count: 0 })
-  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([])
-  const [filterOptions, setFilterOptions] = useState<CustomerFilterOptions | null>(null)
-  const [filterOptionsError, setFilterOptionsError] = useState('')
+  const [metadata, setMetadata] = useState<CustomerPortfolioMetadata | null>(null)
+  const [organizationAggregates, setOrganizationAggregates] = useState<CustomerOrganizationAggregate[]>([])
+  const [metadataError, setMetadataError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [allLoading, setAllLoading] = useState(true)
+  const [metadataLoading, setMetadataLoading] = useState(true)
+  const [organizationLoading, setOrganizationLoading] = useState(false)
+  const [organizationLoaded, setOrganizationLoaded] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search)
   const [customerError, setCustomerError] = useState('')
   const [organizationError, setOrganizationError] = useState('')
   const [drawerCustomer, setDrawerCustomer] = useState<CustomerRecord | null>(null)
@@ -90,50 +103,76 @@ export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [orgSelection, setOrgSelection] = useState<OrgSelection>({ chief: null, representative: null })
   const listRequestId = useRef(0)
+  const organizationRequestId = useRef(0)
   const provenanceRequestId = useRef(0)
   const triggerRef = useRef<HTMLElement | null>(null)
 
-  const applyCustomerUniverse = useCallback((rows: CustomerRecord[]) => {
-    setAllCustomers(rows)
-    setFilterOptions(getCustomerFilterOptions(rows))
-    setFilterOptionsError('')
-    setAllLoading(false)
-  }, [])
+  const requestFilters = useMemo<CustomerFilters>(() => ({
+    search: debouncedSearch,
+    status: '',
+    channel: filters.channel,
+    segment: filters.segment,
+    representative: filters.representative,
+    chief: filters.chief,
+  }), [debouncedSearch, filters.channel, filters.segment, filters.representative, filters.chief])
 
   const refresh = useCallback(async () => {
     const requestId = ++listRequestId.current
     setLoading(true)
     setCustomerError('')
     try {
-      const result = await listCustomers(filters, page, PAGE_SIZE, sort)
+      const result = await listCustomers(requestFilters, page, PAGE_SIZE, sort)
       if (requestId !== listRequestId.current) return
+      const lastPage = Math.max(0, Math.ceil(result.count / PAGE_SIZE) - 1)
+      if (page > lastPage) { setPage(lastPage); return }
       setCustomerPage(result)
     } catch (cause) {
       if (requestId === listRequestId.current) setCustomerError(cause instanceof Error ? cause.message : 'Müşteri verisi okunamadı.')
     } finally {
       if (requestId === listRequestId.current) setLoading(false)
     }
-  }, [filters, page, sort])
+  }, [page, requestFilters, sort])
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(filters.search), 250)
+    return () => window.clearTimeout(timer)
+  }, [filters.search])
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
-    setAllLoading(true)
-    void listAllCustomers()
-      .then(applyCustomerUniverse)
-      .catch((cause) => {
-        setFilterOptionsError(cause instanceof Error ? cause.message : 'Filtre seçenekleri okunamadı.')
-        setOrganizationError(cause instanceof Error ? cause.message : 'Organizasyon verisi okunamadı.')
-        setAllLoading(false)
-      })
-  }, [applyCustomerUniverse])
+    let active = true
+    setMetadataLoading(true)
+    setMetadataError('')
+    void getCustomerPortfolioMetadata()
+      .then((result) => { if (active) setMetadata(result) })
+      .catch((cause) => { if (active) setMetadataError(cause instanceof Error ? cause.message : 'Portföy özeti okunamadı.') })
+      .finally(() => { if (active) setMetadataLoading(false) })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (view !== 'organization' || organizationLoaded || organizationLoading) return
+    const requestId = ++organizationRequestId.current
+    setOrganizationLoading(true)
+    setOrganizationError('')
+    void listCustomerOrganizationAggregates()
+      .then((result) => { if (requestId === organizationRequestId.current) { setOrganizationAggregates(result); setOrganizationLoaded(true) } })
+      .catch((cause) => { if (requestId === organizationRequestId.current) { setOrganizationError(cause instanceof Error ? cause.message : 'Organizasyon verisi okunamadı.'); setOrganizationLoaded(true) } })
+      .finally(() => { if (requestId === organizationRequestId.current) setOrganizationLoading(false) })
+  }, [organizationLoaded, organizationLoading, view])
+  useEffect(() => {
+    if (!metadata) return
+    const next = reconcileCustomerFilters(filters, metadata.filterOptions)
+    const changed = (Object.keys(next) as (keyof CustomerFilters)[]).some((key) => next[key] !== filters[key])
+    if (!changed) return
+    setPage(0)
+    setFilters(next)
+  }, [filters, metadata])
   useEffect(() => { savePreference('p02u-v7-filters', filters) }, [filters])
 
-  // The database surface is already the canonical active, resolved portfolio.
-  const organizationCustomers = allCustomers
-  const chiefs = useMemo(
-    () => [...new Set(organizationCustomers.map((customer) => customer.chief).filter((value): value is string => Boolean(value)))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr')),
-    [organizationCustomers],
-  )
+  const chiefs = useMemo(() => {
+    const metadataChiefs = metadata?.filterOptions.chief ?? []
+    if (metadataChiefs.length) return metadataChiefs
+    return [...new Set(organizationAggregates.map((bucket) => bucket.chief))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr'))
+  }, [metadata, organizationAggregates])
 
   useEffect(() => {
     if (view !== 'organization' || !chiefs.length) return
@@ -206,10 +245,10 @@ export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
       onFilter={updateFilter}
       onClear={clearFilters}
       customerPage={customerPage}
-      allCustomers={allCustomers}
-      allLoading={allLoading}
-      filterOptions={filterOptions}
-      filterOptionsError={filterOptionsError}
+      metadata={metadata}
+      metadataLoading={metadataLoading}
+      filterOptions={metadata?.filterOptions ?? null}
+      filterOptionsError={metadataError}
       loading={loading}
       error={customerError}
       pages={pages}
@@ -223,8 +262,8 @@ export function CustomerWorkspace({ role }: { role: ApplicationRole }) {
       setMobileFiltersOpen={setMobileFiltersOpen}
       activeFilterCount={activeFilterCount}
     /> : <OrganizationView
-      customers={organizationCustomers}
-      loading={allLoading}
+      aggregates={organizationAggregates}
+      loading={organizationLoading || metadataLoading}
       error={organizationError}
       chiefs={chiefs}
       selection={orgSelection}
@@ -251,8 +290,8 @@ function CustomerList(props: {
   onFilter: (key: keyof CustomerFilters, value: string) => void
   onClear: () => void
   customerPage: { rows: CustomerRecord[]; count: number }
-  allCustomers: CustomerRecord[]
-  allLoading: boolean
+  metadata: CustomerPortfolioMetadata | null
+  metadataLoading: boolean
   filterOptions: CustomerFilterOptions | null
   filterOptionsError: string
   loading: boolean
@@ -269,13 +308,15 @@ function CustomerList(props: {
   activeFilterCount: number
 }) {
   const {
-    filters, onFilter, onClear, customerPage, allCustomers, allLoading, filterOptions, filterOptionsError,
+    filters, onFilter, onClear, customerPage, metadata, metadataLoading, filterOptions, filterOptionsError,
     loading, error, pages, page, setPage, sort, setSort, onOpen, onCopy, mobileFiltersOpen, setMobileFiltersOpen,
     activeFilterCount,
   } = props
-  const activeCount = allCustomers.length
-  const organizedCount = allCustomers.length
-  const openCount = allCustomers.filter((customer) => customer.channel === 'OPEN').length
+  const summaryUnavailable = metadataLoading || !metadata
+  const mobileLayout = useMediaQuery('(max-width: 700px)')
+  const activeCount = metadata?.totalCount ?? 0
+  const organizedCount = metadata?.totalCount ?? 0
+  const openCount = metadata?.openCount ?? 0
 
   function toggleSort(key: CustomerSortKey) {
     setPage(0)
@@ -289,17 +330,17 @@ function CustomerList(props: {
 
   return <>
     <section className="customer-summary-v7" aria-label="Müşteri portföyü özeti">
-      <article className="customer-summary-card-v7 primary"><span>Toplam yayımlanmış müşteri</span><strong>{allLoading ? '—' : allCustomers.length.toLocaleString('tr-TR')}</strong><small>Current business read surface</small></article>
-      <article className="customer-summary-card-v7"><span>Aktif müşteri</span><strong>{allLoading ? '—' : activeCount.toLocaleString('tr-TR')}</strong><small>Resolved durum</small></article>
-      <article className="customer-summary-card-v7"><span>Organizasyona bağlı</span><strong>{allLoading ? '—' : organizedCount.toLocaleString('tr-TR')}</strong><small>%90 kuralıyla çözümlenmiş hiyerarşi</small></article>
-      <article className="customer-summary-card-v7"><span>Açık Kanal</span><strong>{allLoading ? '—' : openCount.toLocaleString('tr-TR')}</strong><small>Yayımlanmış müşteri evreni</small></article>
+      <article className="customer-summary-card-v7 primary"><span>Aktif portföy</span><strong>{summaryUnavailable ? '—' : activeCount.toLocaleString('tr-TR')}</strong><small>Current business read surface</small></article>
+      <article className="customer-summary-card-v7"><span>Aktif müşteri</span><strong>{summaryUnavailable ? '—' : activeCount.toLocaleString('tr-TR')}</strong><small>Resolved durum</small></article>
+      <article className="customer-summary-card-v7"><span>Organizasyona bağlı</span><strong>{summaryUnavailable ? '—' : organizedCount.toLocaleString('tr-TR')}</strong><small>%90 kuralıyla çözümlenmiş hiyerarşi</small></article>
+      <article className="customer-summary-card-v7"><span>Açık Kanal</span><strong>{summaryUnavailable ? '—' : openCount.toLocaleString('tr-TR')}</strong><small>Aktif portföy evreni</small></article>
     </section>
 
     <section className="customer-list-surface-v7">
       <div className="customer-list-head-v7">
-        <div><strong>Resolved customer listesi</strong><span>Müşteri no, tabela, müşteri veya temsilci ile hızlı arama.</span></div>
+        <div><strong>Resolved customer listesi</strong><span>Müşteri no, tabela, müşteri, temsilci veya şef ile hızlı arama.</span></div>
         <div className="customer-search-actions-v7">
-          <label className="customer-search-v7"><span aria-hidden="true">⌕</span><input value={filters.search} onChange={(event) => onFilter('search', event.target.value)} placeholder="Müşteri no, ad, tabela ara…" /></label>
+          <label className="customer-search-v7"><span aria-hidden="true">⌕</span><input value={filters.search} onChange={(event) => onFilter('search', event.target.value)} placeholder="Müşteri no, ad, tabela, temsilci veya şef ara…" /></label>
           <button type="button" className="mobile-filter-button-v7" onClick={() => setMobileFiltersOpen(true)}>Filtreler <b>{activeFilterCount}</b></button>
         </div>
       </div>
@@ -321,7 +362,14 @@ function CustomerList(props: {
 
       <div className="customer-result-bar-v7"><strong>{customerPage.count.toLocaleString('tr-TR')} kayıt</strong><span>Sayfa başına {PAGE_SIZE}</span></div>
 
-      <div className="customer-table-wrap-v7">
+      {mobileLayout ? <div className="customer-mobile-list-v7">{customerPage.rows.map((customer) => <article key={customer.customerId} className="customer-mobile-card-v7" tabIndex={0} role="button" onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; onOpen(customer, event.currentTarget) }} onKeyDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer, event.currentTarget) } }}>
+        <div className="mobile-card-head-v7"><button type="button" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button><StatusBadge status={customer.status} /></div>
+        <h3>{display(customer.tradeName)}</h3>
+        <p>{display(customer.customerName)}</p>
+        <div className="mobile-card-facts-v7"><div><span>Satış Kanalı</span><ChannelBadge channel={customer.channel} /></div><div><span>Segment</span><strong>{display(customer.segment)}</strong></div></div>
+        <div className="mobile-representative-v7"><span>Satış Temsilcisi</span><strong>{personName(customer.representative)}</strong></div>
+        <div className="mobile-card-foot-v7"><span>Detayda satış şefi ve tüm alanlar</span><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(customer, event.currentTarget) }}>Detay ›</button></div>
+      </article>)}</div> : <div className="customer-table-wrap-v7">
         <table className="customer-table-v7">
           <thead><tr>
             <th><button type="button" onClick={() => toggleSort('customerId')}>Müşteri No{sortGlyph('customerId')}</button></th>
@@ -345,18 +393,21 @@ function CustomerList(props: {
           </tr>)}</tbody>
         </table>
         {!loading && !customerPage.rows.length ? <div className="customer-empty-v7"><span>⌕</span><strong>Eşleşen müşteri bulunamadı.</strong><small>Arama veya filtreleri temizleyip tekrar deneyin.</small></div> : null}
+      </div>}
+      {mobileLayout && !loading && !customerPage.rows.length ? <div className="customer-empty-v7"><span>⌕</span><strong>Eşleşen müşteri bulunamadı.</strong><small>Arama veya filtreleri temizleyip tekrar deneyin.</small></div> : null}
+
+      <div className="customer-pagination-v7">
+        <span>{customerPage.count ? `${(page * PAGE_SIZE + 1).toLocaleString('tr-TR')}–${Math.min((page + 1) * PAGE_SIZE, customerPage.count).toLocaleString('tr-TR')} / ${customerPage.count.toLocaleString('tr-TR')}` : '0 / 0'} · {page + 1} / {pages} sayfa</span>
+        <div className="customer-pagination-actions-v7">
+          <button type="button" disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>‹ Önceki</button>
+          <div className="customer-page-numbers-v7" aria-label="Müşteri sayfaları">
+            {getCustomerPaginationItems(page, pages).map((item) => typeof item === 'number'
+              ? <button type="button" key={item} className={item === page ? 'active' : ''} aria-current={item === page ? 'page' : undefined} onClick={() => setPage(item)}>{item + 1}</button>
+              : <span key={item} aria-hidden="true">…</span>)}
+          </div>
+          <button type="button" disabled={page + 1 >= pages} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Sonraki ›</button>
+        </div>
       </div>
-
-      <div className="customer-mobile-list-v7">{customerPage.rows.map((customer) => <article key={customer.customerId} className="customer-mobile-card-v7" tabIndex={0} role="button" onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; onOpen(customer, event.currentTarget) }} onKeyDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(customer, event.currentTarget) } }}>
-        <div className="mobile-card-head-v7"><button type="button" onClick={(event) => { event.stopPropagation(); onCopy(customer.customerId) }}>{customer.customerId}</button><StatusBadge status={customer.status} /></div>
-        <h3>{display(customer.tradeName)}</h3>
-        <p>{display(customer.customerName)}</p>
-        <div className="mobile-card-facts-v7"><div><span>Satış Kanalı</span><ChannelBadge channel={customer.channel} /></div><div><span>Segment</span><strong>{display(customer.segment)}</strong></div></div>
-        <div className="mobile-representative-v7"><span>Satış Temsilcisi</span><strong>{personName(customer.representative)}</strong></div>
-        <div className="mobile-card-foot-v7"><span>Detayda satış şefi ve tüm alanlar</span><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(customer, event.currentTarget) }}>Detay ›</button></div>
-      </article>)}</div>
-
-      <div className="customer-pagination-v7"><span>{customerPage.count ? `${(page * PAGE_SIZE + 1).toLocaleString('tr-TR')}–${Math.min((page + 1) * PAGE_SIZE, customerPage.count).toLocaleString('tr-TR')} / ${customerPage.count.toLocaleString('tr-TR')}` : '0 / 0'} · {page + 1} / {pages} sayfa</span><div><button type="button" disabled={page === 0} onClick={() => setPage(Math.max(0, page - 1))}>‹ Önceki</button><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Sonraki ›</button></div></div>
     </section>
   </>
 }
@@ -377,8 +428,8 @@ function ChannelBadge({ channel }: { channel: string }) { return <span className
 function StatusBadge({ status }: { status: string }) { return <span className={`status-badge-v7 ${statusClass(status)}`}>{statusLabel(status)}</span> }
 function PersonCell({ value }: { value: string | null }) { return <div className="person-cell-v7"><span>{initials(personName(value))}</span><strong title={personName(value)}>{personName(value)}</strong></div> }
 
-function OrganizationView({ customers, loading, error, chiefs, selection, setSelection, onDrill }: {
-  customers: CustomerRecord[]
+function OrganizationView({ aggregates, loading, error, chiefs, selection, setSelection, onDrill }: {
+  aggregates: CustomerOrganizationAggregate[]
   loading: boolean
   error: string
   chiefs: string[]
@@ -388,32 +439,40 @@ function OrganizationView({ customers, loading, error, chiefs, selection, setSel
 }) {
   if (loading) return <div className="customer-state-v7" role="status">Organizasyon verisi yükleniyor…</div>
   if (error) return <div className="customer-notice-v7 error" role="alert">Organizasyon verisi yüklenemedi. {error}</div>
-  if (!customers.length || !selection.chief) return <div className="customer-state-v7"><strong>Çözülmüş organizasyon eşleşmesi bulunmuyor.</strong></div>
+  if (!aggregates.length || !selection.chief) return <div className="customer-state-v7"><strong>Çözülmüş organizasyon eşleşmesi bulunmuyor.</strong></div>
 
-  const chiefCustomers = customers.filter((customer) => customer.chief === selection.chief)
-  const reps = [...new Set(chiefCustomers.map((customer) => customer.representative).filter((value): value is string => Boolean(value)))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr'))
-  const selectedCustomers = selection.representative ? chiefCustomers.filter((customer) => customer.representative === selection.representative) : chiefCustomers
-  const channelCounts = new Map(counts(selectedCustomers.map((customer) => customer.channel)))
-  const open = channelCounts.get('OPEN') ?? 0
-  const closed = channelCounts.get('CLOSED') ?? 0
-  const openPct = selectedCustomers.length ? Math.round(open / selectedCustomers.length * 100) : 0
-  const segmentCounts = counts(selectedCustomers.map((customer) => customer.segment).filter((value): value is string => Boolean(value)))
+  const totalCustomers = aggregates.reduce((sum, bucket) => sum + bucket.customerCount, 0)
+  const allRepresentatives = new Set(aggregates.map((bucket) => bucket.representative))
+  const chiefBuckets = aggregates.filter((bucket) => bucket.chief === selection.chief)
+  const reps = [...new Set(chiefBuckets.map((bucket) => bucket.representative))].sort((a, b) => personName(a).localeCompare(personName(b), 'tr'))
+  const selectedBuckets = selection.representative ? chiefBuckets.filter((bucket) => bucket.representative === selection.representative) : chiefBuckets
+  const selectedTotal = selectedBuckets.reduce((sum, bucket) => sum + bucket.customerCount, 0)
+  const open = selectedBuckets.filter((bucket) => bucket.channel === 'OPEN').reduce((sum, bucket) => sum + bucket.customerCount, 0)
+  const closed = selectedBuckets.filter((bucket) => bucket.channel === 'CLOSED').reduce((sum, bucket) => sum + bucket.customerCount, 0)
+  const openPct = selectedTotal ? Math.round(open / selectedTotal * 100) : 0
+  const segmentMap = new Map<string, number>()
+  selectedBuckets.forEach((bucket) => {
+    if (!bucket.segment) return
+    segmentMap.set(bucket.segment, (segmentMap.get(bucket.segment) ?? 0) + bucket.customerCount)
+  })
+  const segmentCounts = [...segmentMap.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'))
   const maxSegment = Math.max(1, ...segmentCounts.map(([, value]) => value))
   const selectedName = selection.representative ?? selection.chief
 
   return <section className="organization-v7">
-    <header className="organization-head-v7"><div><span>SATIŞ ORGANİZASYONU</span><h2>Şef ve temsilci portföyleri</h2><p>%90 kuralıyla çözümlenmiş authoritative organizasyonu müşteri dağılımlarıyla inceleyin.</p></div><div><small>Çözümlenmiş organizasyon</small><strong>{new Set(customers.map((customer) => customer.representative)).size} temsilci · {customers.length.toLocaleString('tr-TR')} aktif müşteri</strong></div></header>
+    <header className="organization-head-v7"><div><span>SATIŞ ORGANİZASYONU</span><h2>Şef ve temsilci portföyleri</h2><p>%90 kuralıyla çözümlenmiş authoritative organizasyonu müşteri dağılımlarıyla inceleyin.</p></div><div><small>Çözümlenmiş organizasyon</small><strong>{allRepresentatives.size} temsilci · {totalCustomers.toLocaleString('tr-TR')} aktif müşteri</strong></div></header>
 
     <div className="chief-switcher-v7">{chiefs.map((chief) => {
-      const rows = customers.filter((customer) => customer.chief === chief)
-      const repCount = new Set(rows.map((customer) => customer.representative)).size
-      return <button key={chief} type="button" className={selection.chief === chief ? 'active' : ''} onClick={() => setSelection({ chief, representative: null })}><span>{initials(personName(chief))}</span><div><strong>{personName(chief)}</strong><small>{repCount} temsilci · {rows.length} aktif müşteri</small></div><b>›</b></button>
+      const buckets = aggregates.filter((bucket) => bucket.chief === chief)
+      const repCount = new Set(buckets.map((bucket) => bucket.representative)).size
+      const customerCount = buckets.reduce((sum, bucket) => sum + bucket.customerCount, 0)
+      return <button key={chief} type="button" className={selection.chief === chief ? 'active' : ''} onClick={() => setSelection({ chief, representative: null })}><span>{initials(personName(chief))}</span><div><strong>{personName(chief)}</strong><small>{repCount} temsilci · {customerCount} aktif müşteri</small></div><b>›</b></button>
     })}</div>
 
-    <div className="organization-scope-v7"><span>Seçili kapsam</span><strong>{personName(selection.chief)}</strong><b>›</b><strong>{selection.representative ? personName(selection.representative) : 'Tüm temsilciler'}</strong><em>{selectedCustomers.length} aktif müşteri</em></div>
+    <div className="organization-scope-v7"><span>Seçili kapsam</span><strong>{personName(selection.chief)}</strong><b>›</b><strong>{selection.representative ? personName(selection.representative) : 'Tüm temsilciler'}</strong><em>{selectedTotal} aktif müşteri</em></div>
 
     <div className="organization-overview-v7">
-      <article className="organization-spotlight-v7"><div className="spotlight-head-v7"><div className="spotlight-person-v7"><span>{initials(personName(selectedName))}</span><div><small>{selection.representative ? 'Satış Temsilcisi' : 'Satış Şefi'}</small><h3>{personName(selectedName)}</h3><p>{selection.representative ? `${personName(selection.chief)} ekibi · temsilci portföyü` : `${reps.length} satış temsilcisi`}</p></div></div><button type="button" onClick={() => onDrill(selection.chief, selection.representative)}>{selection.representative ? 'Temsilci müşterileri' : 'Şef müşterileri'} ↗</button></div><div className="spotlight-metrics-v7"><div><span>Aktif müşteri</span><strong>{selectedCustomers.length}</strong></div><div><span>Açık Kanal</span><strong>{open}</strong></div><div><span>Kapalı Kanal</span><strong>{closed}</strong></div></div></article>
+      <article className="organization-spotlight-v7"><div className="spotlight-head-v7"><div className="spotlight-person-v7"><span>{initials(personName(selectedName))}</span><div><small>{selection.representative ? 'Satış Temsilcisi' : 'Satış Şefi'}</small><h3>{personName(selectedName)}</h3><p>{selection.representative ? `${personName(selection.chief)} ekibi · temsilci portföyü` : `${reps.length} satış temsilcisi`}</p></div></div><button type="button" onClick={() => onDrill(selection.chief, selection.representative)}>{selection.representative ? 'Temsilci müşterileri' : 'Şef müşterileri'} ↗</button></div><div className="spotlight-metrics-v7"><div><span>Aktif müşteri</span><strong>{selectedTotal}</strong></div><div><span>Açık Kanal</span><strong>{open}</strong></div><div><span>Kapalı Kanal</span><strong>{closed}</strong></div></div></article>
 
       <article className="organization-channel-v7"><header><strong>Satış kanalı dağılımı</strong><span>Aktif müşteri portföyü</span></header><div className="donut-row-v7"><div className="donut-v7" style={{ '--open-pct': `${openPct}%` } as CSSProperties}><div><strong>{openPct}%</strong><span>Açık</span></div></div><div className="channel-legend-v7"><div><i className="open" /><span>Açık Kanal</span><strong>{open}</strong></div><div><i className="closed" /><span>Kapalı Kanal</span><strong>{closed}</strong></div></div></div></article>
 
@@ -421,11 +480,12 @@ function OrganizationView({ customers, loading, error, chiefs, selection, setSel
     </div>
 
     <section className="representative-roster-v7"><header><div><span>EKİP</span><h3>Satış temsilcileri</h3><p>Bir temsilci seçin; üstteki kanal ve segment analizi seçilen portföye göre güncellensin.</p></div><strong>{reps.length} temsilci</strong></header><div>{reps.map((rep) => {
-      const rows = chiefCustomers.filter((customer) => customer.representative === rep)
+      const repBuckets = chiefBuckets.filter((bucket) => bucket.representative === rep)
+      const customerCount = repBuckets.reduce((sum, bucket) => sum + bucket.customerCount, 0)
       const selected = selection.representative === rep
       return <div key={rep} className={`representative-row-v7 ${selected ? 'selected' : ''}`} role="button" tabIndex={0} aria-pressed={selected} onClick={(event) => { if ((event.target as HTMLElement).closest('button')) return; setSelection({ chief: selection.chief, representative: selected ? null : rep }) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelection({ chief: selection.chief, representative: selected ? null : rep }) } }}>
         <div className="representative-identity-v7"><span className="representative-person-icon-v7" aria-hidden="true"><PersonIcon /></span><div><small>SATIŞ TEMSİLCİSİ</small><strong>{personName(rep)}</strong></div></div>
-        <div className="representative-count-v7"><strong>{rows.length}</strong><span>aktif müşteri</span></div>
+        <div className="representative-count-v7"><strong>{customerCount}</strong><span>aktif müşteri</span></div>
         <span className="representative-state-v7">{selected ? '✓ Seçili' : 'Dağılımı gör'}</span>
         <button type="button" onClick={() => onDrill(selection.chief, rep)}>Müşterileri aç ↗</button>
       </div>

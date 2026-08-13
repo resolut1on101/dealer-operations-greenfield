@@ -433,6 +433,24 @@ begin
     ),
     'safe business surface exposes only fixed business columns and no technical evidence fields'
   );
+  perform pg_temp.assert_true(
+    (select total_count = (select count(*) from public.read_current_customer_business_surface())
+       and open_count + closed_count + unclassified_count = total_count
+     from public.read_current_customer_portfolio_metadata())
+    and (select coalesce(sum(customer_count), 0) = (select count(*) from public.read_current_customer_business_surface())
+         from public.read_current_customer_organization_aggregates()),
+    'lightweight portfolio metadata and organization aggregates reconcile to the safe business surface'
+  );
+  perform pg_temp.assert_true(
+    (select cardinality(representatives) > 0 and cardinality(chiefs) > 0
+     from public.read_current_customer_portfolio_metadata())
+    and not exists (
+      select 1
+      from public.read_current_customer_organization_aggregates()
+      where representative is null or chief is null or customer_count <= 0
+    ),
+    'viewer metadata exposes only authoritative organization facets and positive aggregate buckets'
+  );
   v_rejected := false; begin perform public.stage_customer_master_rows(v_snapshot_two_id); exception when others then v_rejected := true; end;
   perform pg_temp.assert_true(v_rejected, 'viewer cannot mutate Customer Master');
   reset role; set local role authenticated; set local request.jwt.claim.role='authenticated'; perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
