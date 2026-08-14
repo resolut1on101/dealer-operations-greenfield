@@ -6,7 +6,7 @@
 **Historical Production UAT:** `PASS`
 **2026-08-14 Canonicalization Correction:** `ACCEPTED`
 **Package 03U Status:** `CANCELLED_NOT_REQUIRED`
-**Acceptance Basis:** The original Package 03 production baseline and the 2026-08-14 canonicalization correction both completed their required runtime/LIVE gates and received explicit user PASS.
+**Acceptance Basis:** The original Package 03 production baseline was explicitly accepted. The canonicalization correction below is separately accepted after all canonical runtime gates and explicit user PASS were completed.
 
 ---
 
@@ -37,7 +37,7 @@
 
 The historical Package 03 baseline was accepted after its production UAT and remains historical evidence.
 
-The 2026-08-14 canonicalization correction completed technical, LIVE, concurrency and explicit user UAT gates and is closed as **`ACCEPTED`**.
+The 2026-08-14 canonicalization correction is **`ACCEPTED`**, separately and finally closed on the basis of the gates recorded below.
 
 Package 03 remains an internal canonical product-normalization layer with a frozen paket reference; no standalone Product Master/Ürünler UX is approved. Product-related user-facing work continues in operational packages `03A/03AU`, Sellout, FKNS, and planning.
 Package 03U remains **`CANCELLED_NOT_REQUIRED`**.
@@ -66,11 +66,11 @@ This correction does not create a new 03U screen. The next user-facing product-r
 
 For the current correction, the gate status is explicit:
 
-- source: ✅
-- PostgreSQL runtime: ✅
-- LIVE migration: ✅
-- LIVE smoke: ✅
-- concurrency: ✅
-- user explicit PASS: ✅
+- source: `PASS` ✅
+- PostgreSQL runtime: `PASS` ✅
+- LIVE migration: `PASS` ✅
+- LIVE smoke: `PASS` ✅
+- concurrency: `PASS` ✅
+- explicit user PASS: `PASS` ✅
 
-The correction is closed as `ACCEPTED`; Package 03 remains the internal canonical product-normalization authority and Package 03U remains cancelled/not required.
+Final Package 03 canonical normalization: **`ACCEPTED`**. The historical accepted baseline remains preserved as historical evidence; this correction is no longer pending.
