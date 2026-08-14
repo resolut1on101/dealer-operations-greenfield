@@ -4,9 +4,9 @@
 **Historical P03 Baseline:** `ACCEPTED`
 **Historical Technical Release:** `PASS`
 **Historical Production UAT:** `PASS`
-**2026-08-14 Canonicalization Correction:** `LIVE_TESTING_PENDING_USER_PASS`
+**2026-08-14 Canonicalization Correction:** `ACCEPTED`
 **Package 03U Status:** `CANCELLED_NOT_REQUIRED`
-**Acceptance Basis:** The original Package 03 production baseline was explicitly accepted. The canonicalization correction below is not marked accepted until canonical runtime gates and a new explicit user PASS are complete.
+**Acceptance Basis:** The original Package 03 production baseline was explicitly accepted. The canonicalization correction below is separately accepted after all canonical runtime gates and explicit user PASS were completed.
 
 ---
 
@@ -37,7 +37,7 @@
 
 The historical Package 03 baseline was accepted after its production UAT and remains historical evidence.
 
-The 2026-08-14 canonicalization correction is **not** closed as `ACCEPTED`. Its current state is **`LIVE_TESTING_PENDING_USER_PASS`**.
+The 2026-08-14 canonicalization correction is **`ACCEPTED`**, separately and finally closed on the basis of the gates recorded below.
 
 Package 03 remains an internal canonical product-normalization layer with a frozen paket reference; no standalone Product Master/Ürünler UX is approved. Product-related user-facing work continues in operational packages `03A/03AU`, Sellout, FKNS, and planning.
 Package 03U remains **`CANCELLED_NOT_REQUIRED`**.
@@ -62,15 +62,15 @@ Forward migration `20260814000017_package_03_canonical_product_normalization.sql
 
 This correction does not create a new 03U screen. The next user-facing product-related surfaces belong to operational modules such as warehouse stock, Sellout and FKNS.
 
-**Correction acceptance state:** `LIVE_TESTING_PENDING_USER_PASS`
+**Correction acceptance state:** `ACCEPTED`
 
 For the current correction, the gate status is explicit:
 
-- source: ✅
-- PostgreSQL runtime: ✅
-- LIVE migration: ✅
-- LIVE smoke: ✅
-- concurrency: ✅
-- user explicit PASS: ⏳
+- source: `PASS` ✅
+- PostgreSQL runtime: `PASS` ✅
+- LIVE migration: `PASS` ✅
+- LIVE smoke: `PASS` ✅
+- concurrency: `PASS` ✅
+- explicit user PASS: `PASS` ✅
 
-The correction therefore remains open pending the user’s explicit PASS; the historical accepted baseline does not close this current correction.
+Final Package 03 canonical normalization: **`ACCEPTED`**. The historical accepted baseline remains preserved as historical evidence; this correction is no longer pending.
