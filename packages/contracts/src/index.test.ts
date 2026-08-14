@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productResolutionStateSchema, sourceContractSignatureSchema } from './index'
+import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productCanonicalMappingSchema, productDomainFreshnessSchema, productDomainFreshnessStateSchema, productDomainSummarySchema, productResolutionStateSchema, roundCanonicalQuantityForDisplay, sourceContractSignatureSchema } from './index'
 
 describe('application role contract', () => {
   it('permits only admin and viewer', () => {
@@ -41,6 +41,31 @@ describe('Package 01 import transport contracts', () => {
       requiredHeaders: ['Customer Code'], requiredFields: ['Customer Code'],
       controlTotalFields: {}, controlTotalScales: {}, publicationMode: 'FULL_REPLACE',
     }).sourceKind).toBe('CUSTOMER_MASTER')
+  })
+})
+
+describe('Package 03 canonical product normalization', () => {
+  it('keeps canonical factors exact and makes rounding presentation-only', () => {
+    const split = productCanonicalMappingSchema.parse({
+      scopeKey: '1237', referenceVersion: 'paket-51fb373c-v1',
+      rawProductCode: '154525', canonicalProductCode: '150021',
+      canonicalQuantityNumerator: 1, canonicalQuantityDenominator: 2, normalizationPolicy: 'STANDARD',
+    })
+    expect(split.canonicalProductCode).toBe('150021')
+    const exact = 10 + split.canonicalQuantityNumerator / split.canonicalQuantityDenominator + 0.25
+    expect(exact).toBe(10.75)
+    expect(roundCanonicalQuantityForDisplay(exact)).toBe(11)
+    expect(exact * 12).toBe(129)
+  })
+
+  it('supports the opposite high-alcohol canonicalization direction', () => {
+    const highAlcoholCase = productCanonicalMappingSchema.parse({
+      scopeKey: '1237', referenceVersion: 'paket-51fb373c-v1',
+      rawProductCode: '152224', canonicalProductCode: '152315',
+      canonicalQuantityNumerator: 24, canonicalQuantityDenominator: 1, normalizationPolicy: 'HIGH_ALCOHOL',
+    })
+    expect(highAlcoholCase.canonicalProductCode).toBe('152315')
+    expect(highAlcoholCase.canonicalQuantityNumerator / highAlcoholCase.canonicalQuantityDenominator).toBe(24)
   })
 })
 
@@ -90,4 +115,36 @@ describe('Package 03 product contracts', () => {
     expect(() => productBusinessRowSchema.parse({ ...resolved, lpu: null, lpuVerificationState: 'missing' })).toThrow()
   })
 
+  it('enforces product domain freshness state vocabulary', () => {
+    expect(productDomainFreshnessStateSchema.parse('FRESH')).toBe('FRESH')
+    expect(productDomainFreshnessStateSchema.parse('STALE')).toBe('STALE')
+    expect(productDomainFreshnessStateSchema.parse('BLOCKED')).toBe('BLOCKED')
+    expect(productDomainFreshnessStateSchema.parse('PENDING_SOURCES')).toBe('PENDING_SOURCES')
+    expect(() => productDomainFreshnessStateSchema.parse('OUTDATED')).toThrow()
+  })
+
+  it('validates viewer-safe product freshness without exposing internal run ids', () => {
+    const freshness = productDomainFreshnessSchema.parse({
+      scopeKey: '1237', freshnessState: 'FRESH', freshnessError: null, isFresh: true,
+      staleSince: null, lastAttemptedAt: '2026-08-14T00:00:00.000Z',
+    })
+    expect(freshness.freshnessState).toBe('FRESH')
+    expect(freshness.isFresh).toBe(true)
+    expect('activeRunId' in freshness).toBe(false)
+  })
+
+  it('validates the accepted product domain summary shape independently from freshness state', () => {
+    const summary = productDomainSummarySchema.parse({
+      scopeKey: '1237',
+      variantCount: 10, conversionObservationCount: 5, conversionProductCount: 8, conversionComponentCount: 3,
+      directedEdgeCount: 4, familyCount: 2, productNameResolved: 10, productNamePartial: 0, productNameBlocked: 0,
+      familyResolved: 10, familyPartial: 0, familyBlocked: 0, familyResolutionCoverage: 1.0,
+      quantityUomResolved: 10, quantityUomPartial: 0, quantityUomBlocked: 0,
+      lpuResolved: 10, lpuPartial: 0, lpuBlocked: 0, litreResolutionCoverage: 1.0,
+      lpuSellout: 8, lpuKa: 2, lpuGraph: 0, lpuCrossSourceVerified: 8, lpuSelloutVerified: 0, lpuKaVerified: 2,
+      lpuDerivedPending: 0, lpuMissing: 0, lpuCrossSourceCompared: 8, lpuSourceVarianceNonzero: 0,
+      volumeTrackedTrue: 10, volumeTrackedUnknown: 0,
+    })
+    expect(summary.variantCount).toBe(10)
+  })
 })

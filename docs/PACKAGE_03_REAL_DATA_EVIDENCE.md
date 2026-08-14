@@ -1,8 +1,12 @@
-# Package 03 — Real Data Evidence (Final Plan-Aligned)
+# Package 03 — Real Data Evidence + Canonical Normalization Correction
 
 Scope: `1237`
 
-This evidence was derived from the three read-only real workbooks supplied for Package 03. The workbooks are not committed into application source. Package 01 remains the raw source/provenance store; Package 03 stores compact product resolution, exact conversion relations, candidate coefficients, and current/history read models only.
+This evidence was derived from the three read-only real workbooks supplied for Package 03. The workbooks are not committed into application source.
+
+**2026-08-14 business correction:** `paket.xlsx` is not a recurring operational source and is not user-uploadable. It is one-time development/reference evidence used to freeze the product split/combine rules into an internal, versioned canonicalization reference. Runtime operational sources remain Sellout (Geleneksel) and KA İrsaliye (Modern). The old `PRODUCT_CONVERSION` upload/publication interpretation is historical and is retired by forward migration `20260814000017_package_03_canonical_product_normalization.sql`.
+
+Package 03 is therefore an internal calculation/normalization layer, not a Product Master UI. Split/package codes are normalized before every downstream product calculation; technical graph/LPU evidence is not a normal viewer surface.
 
 ## Binding calculation corrections
 
@@ -18,15 +22,22 @@ Package 03 follows the binding stock/product contract:
 
 ## Source identity
 
-| Source | File | Rows | SHA-256 |
+| Role | File | Rows | SHA-256 |
 |---|---|---:|---|
-| PRODUCT_CONVERSION | `paket.xlsx` | 331 | `51fb373ca178b68a8ddd29a6ea8f65f54162137c78aaccfb9b7f93805ffffdf2` |
-| SELLOUT | `Sellout Raporu (5).xlsx` | 12,666 | `cd937d02c0fdf6eda155593ab5d4e5ca43ccce60cb0352a6706e43544fac6c68` |
-| KA_DELIVERY | `İrsaliye Listesi (2).xlsx` | 1,587 | `eefa6f383482ceec1931a61474d91d8f2bcc7c1216daaa909a38058b25ca3cab` |
+| **Frozen split/combine reference evidence — not uploadable** | `paket.xlsx` | 331 | `51fb373ca178b68a8ddd29a6ea8f65f54162137c78aaccfb9b7f93805ffffdf2` |
+| **Geleneksel channel runtime sales** | `Sellout Raporu (5).xlsx` | 12,666 | `cd937d02c0fdf6eda155593ab5d4e5ca43ccce60cb0352a6706e43544fac6c68` |
+| **Modern/KA channel runtime sales** | `İrsaliye Listesi (2).xlsx` | 1,587 | `eefa6f383482ceec1931a61474d91d8f2bcc7c1216daaa909a38058b25ca3cab` |
 
-All rows in the three supplied workbooks carry embedded distributor/plant scope `1237` (`Üretim yeri`, `Bayi/Distribütör`, `Bayi/Dist Kodu`). Materialization rejects workbook-carried scope that differs from the declared Package 01 publication scope.
+All supplied evidence belongs to dealer/plant scope `1237`. The canonical reference is frozen as version `paket-51fb373c-v1`; runtime freshness depends on the active canonical reference plus current Sellout and KA publications, **not** on a `paket.xlsx` publication head.
 
-Materialization is also bound to the explicit Package 03 source-contract versions (`PRODUCT_CONVERSION v1`, `SELLOUT v1`, `KA_DELIVERY v1`). A later header/parser contract cannot silently change Product Domain semantics; it requires an explicit adapter/version update.
+## Canonical display/calculation rule
+
+- Normal products (`Bira`): split codes collapse into the main/largest canonical stock code. Example: `150021` is canonical; `154525 -> 1/2 × 150021`; `154548 -> 1/4 × 150021`.
+- High-alcohol products (`Distile`): direction is intentionally reversed. Case/multipack codes collapse into the single/retail canonical code. Example: `152224 -> 24 × 152315`.
+- FKNS uses the canonical product identity: a point that buys any split code fulfills the same canonical product target; the same point is counted once.
+- Warehouse stock, stock days, Sellout/KA product aggregation, targets, forecast, safety stock and order need all normalize product code/quantity first.
+- Exact backend quantity is never rounded. Example `10 + 1/2 + 1/4 = 10.75`; UX may display `11`, while litre and every downstream calculation continue using `10.75`.
+- Codes outside the frozen reference remain identity mappings and are never silently dropped.
 
 ## Conversion evidence
 
@@ -49,7 +60,7 @@ The known rejected historical mapping `154558/154559 -> 150003` is absent and is
 
 ## LPU evidence
 
-Current real-source union: **136 product variants**.
+Historical raw source-code union before canonical display normalization: **136 distinct product codes**. This is evidence coverage, not a user-facing product count.
 
 Positive direct evidence:
 
@@ -60,7 +71,7 @@ Positive direct evidence:
 - non-zero Sellout/KA source variance: **1** (`151428`)
 - graph products with an absolute graph candidate: **79 / 84**
 
-Expected canonical active-LPU state:
+Historical pre-correction raw-code LPU resolution evidence (retained only as regression/audit context):
 
 - `RESOLVED`: **109**
 - `PARTIAL`: **27**
@@ -148,21 +159,16 @@ Business family and conversion component remain separate concepts. The same busi
 
 ## Variant metadata contract
 
-The current source set can safely resolve:
+The corrected reference can safely resolve:
 
-- `quantity_uom` for all 84 conversion products from `paket.xlsx`
-- active LPU / candidate sources as described above
-- `volume_tracked=true` only where active LPU is resolved; unresolved volume-tracking remains unknown rather than false
+- exact relative package quantity for all 84 referenced product codes;
+- one canonical business code for all 36 conversion components;
+- normalization policy (`STANDARD` or `HIGH_ALCOHOL`) and exact rational raw→canonical quantity factor;
+- `quantity_uom` evidence from the frozen `paket.xlsx` reference;
+- active LPU / candidate sources as described above where an absolute litre anchor exists.
 
-The supplied Package 03 sources do **not** provide approved values for:
-
-- `units_per_case`
-- `unit_volume_ml`
-- `canonical_stock_variant_code`
-- `replenishment_variant_code`
-
-These are retained as first-class nullable source-pending downstream attributes and are not guessed from product names. Stock/case/order calculations that require them remain dependent on their approved later source/policy.
+The supplied evidence still does **not** justify inventing physical packaging fields such as `units_per_case` or `unit_volume_ml` from product names. `replenishment_variant_code` also remains a separate later ordering/policy decision. The canonical business code used to hide split rows is now explicit and is **not** the same concept as a future replenishment/supplier ordering variant.
 
 ## Storage / history rule
 
-Package 03 does not copy the 12,666 Sellout rows or 1,587 KA rows into new domain observation tables. Raw rows remain in Package 01 evidence. Package 03 persists compact per-run variant resolutions and aggregated conversion edges. Variant resolution rows carry explicit system-valid `valid_from` / `valid_to` periods so future publications preserve prior canonical product truth without duplicating raw-domain copies.
+Runtime Sellout and KA raw rows remain in Package 01 evidence and are not copied into the canonical reference. Historical 00015 per-run product-domain tables remain as audit/history from the accepted baseline, but the corrected downstream normalization authority is the frozen `product_conversion_reference_*` + `product_canonical_mappings` layer introduced by 00017. `paket.xlsx` itself is not stored as a recurring runtime batch requirement.

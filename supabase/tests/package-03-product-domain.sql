@@ -1,299 +1,141 @@
-\set ON_ERROR_STOP on
 begin;
 
-create or replace function pg_temp.assert_true(condition boolean, message text)
-returns void language plpgsql as $$ begin if not condition then raise exception 'ASSERTION FAILED: %', message; end if; end $$;
-
-create or replace function pg_temp.seed_published_product_batch(
-  p_user_id uuid,
-  p_contract_id uuid,
-  p_source_kind text,
-  p_scope_key text,
-  p_rows jsonb,
-  p_hash_seed text
-) returns uuid
-language plpgsql
-as $$
-declare
-  v_batch uuid := gen_random_uuid();
-  v_chunk uuid := gen_random_uuid();
-  v_validation uuid := gen_random_uuid();
-  v_reconciliation uuid := gen_random_uuid();
-  v_candidate uuid := gen_random_uuid();
-  v_publication uuid := gen_random_uuid();
-  v_row_count integer := jsonb_array_length(p_rows);
-  v_version integer;
+create or replace function pg_temp.assert_true(p_condition boolean, p_message text)
+returns void language plpgsql as $$
 begin
-  insert into public.import_batches(
-    id, source_contract_version_id, source_kind, scope_key, source_sheet, source_headers,
-    storage_object_path, declared_file_hash, verified_file_hash, file_size_bytes,
-    expected_rows, expected_chunks, received_chunks, staged_rows, expected_control_totals,
-    status, source_verified_at, created_by
-  )
-  select
-    v_batch, p_contract_id, p_source_kind, p_scope_key, sc.required_sheet, sc.required_headers,
-    'imports/' || v_batch::text || '/source.xlsx', repeat(substr(p_hash_seed,1,1),64), repeat(substr(p_hash_seed,1,1),64), 1,
-    v_row_count, 1, 1, v_row_count, '{}'::jsonb,
-    'PUBLISHED'::public.import_batch_status, now(), p_user_id
-  from public.source_contract_versions sc where sc.id = p_contract_id;
-
-  insert into public.import_chunks(id,batch_id,chunk_no,row_offset,chunk_hash,server_chunk_hash,row_count)
-  values (v_chunk,v_batch,0,0,repeat(substr(p_hash_seed,1,1),64),repeat(substr(p_hash_seed,1,1),64),v_row_count);
-
-  insert into public.staging_rows(batch_id,chunk_id,source_row_no,payload,payload_hash,row_status)
-  select v_batch, v_chunk, item.ordinality, item.value, encode(extensions.digest(convert_to(item.value::text,'UTF8'),'sha256'),'hex'), 'VALID'::public.staging_row_status
-  from jsonb_array_elements(p_rows) with ordinality item(value, ordinality);
-
-  insert into public.validation_runs(id,batch_id,contract_version_id,valid_rows,status)
-  values (v_validation,v_batch,p_contract_id,v_row_count,'PASSED');
-  insert into public.import_reconciliations(id,batch_id,parsed_rows,valid_rows,excluded_rows,blocked_rows,duplicate_rows,expected_control_totals,actual_control_totals,status)
-  values (v_reconciliation,v_batch,v_row_count,v_row_count,0,0,0,'{}','{}','MATCHED');
-  insert into public.candidate_publications(id,batch_id,validation_run_id,reconciliation_id,manifest,status,created_by,published_at)
-  values (v_candidate,v_batch,v_validation,v_reconciliation,jsonb_build_object('test',true),'PUBLISHED',p_user_id,now());
-
-  select coalesce(max(version),0)+1 into v_version from public.publications where source_kind=p_source_kind and scope_key=p_scope_key;
-  insert into public.publications(id,candidate_id,source_kind,scope_key,version,manifest,published_by,published_at)
-  values (v_publication,v_candidate,p_source_kind,p_scope_key,v_version,jsonb_build_object('test',true),p_user_id,now());
-  update public.import_batches set validation_run_id=v_validation,reconciliation_id=v_reconciliation,published_publication_id=v_publication,completed_at=now() where id=v_batch;
-  insert into public.publication_heads(source_kind,scope_key,active_publication_id,version)
-  values (p_source_kind,p_scope_key,v_publication,v_version)
-  on conflict (source_kind,scope_key) do update set active_publication_id=excluded.active_publication_id,version=excluded.version,updated_at=now();
-  return v_batch;
+  if coalesce(p_condition,false) is not true then
+    raise exception 'ASSERTION FAILED: %', p_message;
+  end if;
 end;
 $$;
 
 do $$
 declare
-  v_admin uuid := gen_random_uuid();
-  v_viewer uuid := gen_random_uuid();
-  v_conversion_contract uuid;
-  v_sellout_contract uuid;
-  v_ka_contract uuid;
-  v_conversion_batch uuid;
-  v_sellout_batch uuid;
-  v_ka_batch uuid;
-  v_bad_conversion_batch uuid;
-  v_inconsistent_conversion_batch uuid;
-  v_uom_conflict_batch uuid;
-  v_wrong_scope_sellout_batch uuid;
-  v_result jsonb;
-  v_run uuid;
-  v_old_product_head uuid;
-  v_rejected boolean := false;
-  v_factor_rejected boolean := false;
-  v_uom_rejected boolean := false;
-  v_scope_rejected boolean := false;
+  v_ref uuid;
+  v_exact numeric;
+  v_display numeric;
+  v_fkns bigint;
+  v_canonical_rows bigint;
 begin
-  insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
-  values
-    (v_admin,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','p03-admin@example.test','x',now(),'{}','{}',now(),now()),
-    (v_viewer,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','p03-viewer@example.test','x',now(),'{}','{}',now(),now());
-  update public.user_profiles set role='admin' where user_id=v_admin;
+  select id into v_ref
+  from public.product_conversion_reference_versions
+  where scope_key='1237' and version='paket-51fb373c-v1' and is_active;
 
-  select id into v_conversion_contract from public.source_contract_versions where source_kind='PRODUCT_CONVERSION' and version='1' and is_active;
-  select id into v_sellout_contract from public.source_contract_versions where source_kind='SELLOUT' and version='1' and is_active;
-  select id into v_ka_contract from public.source_contract_versions where source_kind='KA_DELIVERY' and version='1' and is_active;
-
-  perform pg_temp.assert_true(v_conversion_contract is not null and v_sellout_contract is not null and v_ka_contract is not null, 'Package 03 source contracts are active');
+  perform pg_temp.assert_true(v_ref is not null, 'active paket reference must exist');
   perform pg_temp.assert_true(
-    (select required_headers @> '["Üretim yeri","Miktar","Miktar__2"]'::jsonb from public.source_contract_versions where id=v_conversion_contract),
-    'PRODUCT_CONVERSION contract preserves both duplicate Miktar columns'
+    (select evidence_sha256='51fb373ca178b68a8ddd29a6ea8f65f54162137c78aaccfb9b7f93805ffffdf2'
+     and evidence_row_count=331 and product_code_count=84 and directed_relation_count=59 and component_count=36
+     from public.product_conversion_reference_versions where id=v_ref),
+    'reference metadata must match exact paket.xlsx evidence'
   );
 
-  v_conversion_batch := pg_temp.seed_published_product_batch(v_admin,v_conversion_contract,'PRODUCT_CONVERSION','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','100001','Miktar',1,'Temel ölçü birimi','KL','Oluşan Ürün Kodu','100002','Miktar__2',2,'Temel ölçü birimi__2','ADT'),
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','100003','Miktar',1,'Temel ölçü birimi','KL','Oluşan Ürün Kodu','100004','Miktar__2',4,'Temel ölçü birimi__2','ADT')
-  ),'a');
-
-  v_sellout_batch := pg_temp.seed_published_product_batch(v_admin,v_sellout_contract,'SELLOUT','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Bayi/Distribütör','P03-TEST','Malzeme Kodu','100002','Malzeme Tnm.','Variant B','Mal Grubu Tnm.','Family One','Miktar',2,'Litre',1,'Faturalama Tarihi',46000),
-    jsonb_build_object('Bayi/Distribütör','P03-TEST','Malzeme Kodu','100002','Malzeme Tnm.','Variant B','Mal Grubu Tnm.','Family One','Miktar',4,'Litre',2,'Faturalama Tarihi',46001),
-    jsonb_build_object('Bayi/Distribütör','P03-TEST','Malzeme Kodu','225887','Malzeme Tnm.','Conflict Variant','Mal Grubu Tnm.','Family Conflict','Miktar',-5,'Litre',-1.18,'Faturalama Tarihi',46000),
-    jsonb_build_object('Bayi/Distribütör','P03-TEST','Malzeme Kodu','225887','Malzeme Tnm.','Conflict Variant','Mal Grubu Tnm.','Family Conflict','Miktar',-48,'Litre',-11.37,'Faturalama Tarihi',46001),
-    jsonb_build_object('Bayi/Distribütör','P03-TEST','Malzeme Kodu','100007','Malzeme Tnm.','Cross Verified','Mal Grubu Tnm.','Family Cross','Miktar',2,'Litre',1.2,'Faturalama Tarihi',46000)
-  ),'b');
-
-  v_ka_batch := pg_temp.seed_published_product_batch(v_admin,v_ka_contract,'KA_DELIVERY','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100002','Malzeme kısa metni','Variant B','Litre',1,'Miktar',2,'Yükleme Tarihi',46000),
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100002','Malzeme kısa metni','Variant B','Litre',1.02,'Miktar',2,'Yükleme Tarihi',46001),
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100005','Malzeme kısa metni','KA Only','Litre',7.92,'Miktar',1,'Yükleme Tarihi',46000),
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100006','Malzeme kısa metni','KA Weighted','Litre',1.00,'Miktar',2,'Yükleme Tarihi',46000),
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100006','Malzeme kısa metni','KA Weighted','Litre',1.51,'Miktar',3,'Yükleme Tarihi',46001),
-    jsonb_build_object('Bayi/Dist Kodu','P03-TEST','Ürün Kodu','100007','Malzeme kısa metni','Cross Verified','Litre',3,'Miktar',5,'Yükleme Tarihi',46000)
-  ),'c');
-
-  set local role authenticated;
-  perform set_config('request.jwt.claim.role','authenticated',true);
-  perform set_config('request.jwt.claim.sub',v_admin::text,true);
-  v_result := public.materialize_current_product_domain('P03-TEST');
-  v_run := (v_result->>'run_id')::uuid;
-
-  perform pg_temp.assert_true((v_result->'summary'->>'variant_count')::bigint=8, 'union product universe materializes without duplicating raw source rows');
-  perform pg_temp.assert_true((v_result->'summary'->>'directed_edge_count')::bigint=2, 'directed conversion edges are aggregated');
   perform pg_temp.assert_true(
-    (v_result->'summary'->>'product_name_resolved')::bigint=5
-    and (v_result->'summary'->>'product_name_partial')::bigint=3
-    and (v_result->'summary'->>'product_name_blocked')::bigint=0,
-    'product-name resolution states stay explicit'
+    (select count(*)=59 and sum(observation_count)=331
+     from public.product_conversion_reference_edges where reference_version_id=v_ref),
+    '59 stable relations must conserve all 331 observations'
   );
   perform pg_temp.assert_true(
-    (select lpu=1 and lpu_source='CONVERSION_GRAPH' and lpu_resolution_state='RESOLVED' and lpu_verification_state='derived_pending'
-      from public.product_variant_resolutions where run_id=v_run and product_code='100001'),
-    'graph propagation resolves source variant LPU while retaining derived verification state'
+    (select count(*)=84 and count(distinct canonical_product_code)=36
+     from public.product_canonical_mappings where reference_version_id=v_ref),
+    '84 raw codes must normalize to exactly 36 canonical products'
   );
-  perform pg_temp.assert_true(
-    (select f.display_name='Family One' and r.family_source='CONVERSION_GRAPH' and r.family_resolution_state='RESOLVED'
-     from public.product_variant_resolutions r join public.product_families f on f.id=r.family_id where r.run_id=v_run and r.product_code='100001'),
-    'family propagates only through a verified conversion component'
-  );
-  perform pg_temp.assert_true(
-    (select lpu=0.5 and lpu_source='SELLOUT' and lpu_resolution_state='RESOLVED'
-      and sellout_lpu_candidate=0.5 and ka_lpu_candidate=0.505
-      and lpu_source_variance=0.005 and lpu_verification_state='sellout_verified'
-     from public.product_variant_resolutions where run_id=v_run and product_code='100002'),
-    'positive Sellout aggregate remains authoritative while lower-priority KA variance stays visible'
-  );
-  perform pg_temp.assert_true(
-    (select lpu=0.502 and lpu_source='KA_DELIVERY' and lpu_resolution_state='RESOLVED'
-      and ka_lpu_candidate=0.502 and lpu_verification_state='ka_verified'
-     from public.product_variant_resolutions where run_id=v_run and product_code='100006'),
-    'KA LPU uses the binding weighted aggregate sum(litres)/sum(quantity), not row-ratio equality'
-  );
-  perform pg_temp.assert_true(
-    (select lpu=0.6 and sellout_lpu_candidate=0.6 and ka_lpu_candidate=0.6
-      and lpu_source='SELLOUT' and lpu_verification_state='cross_source_verified' and lpu_source_variance=0
-     from public.product_variant_resolutions where run_id=v_run and product_code='100007'),
-    'exact Sellout/KA aggregate agreement is explicitly cross-source verified'
-  );
-  perform pg_temp.assert_true(
-    (select lpu=7.920000000 and lpu_source='KA_DELIVERY' and family_resolution_state='PARTIAL' from public.product_variant_resolutions where run_id=v_run and product_code='100005'),
-    'stable KA resolves LPU while missing family remains partial rather than invented'
-  );
-  perform pg_temp.assert_true(
-    (select lpu is null and lpu_resolution_state='PARTIAL' and family_resolution_state='PARTIAL' from public.product_variant_resolutions where run_id=v_run and product_code in ('100003','100004') limit 1),
-    'unanchored conversion component remains partial and never becomes zero'
-  );
-  perform pg_temp.assert_true(
-    (select lpu is null and lpu_resolution_state='PARTIAL' and lpu_source is null and lpu_verification_state='missing'
-      and sellout_lpu_candidate is null
-      and (resolution_evidence->'sellout'->>'positive_rows')::bigint=0
-      and (resolution_evidence->'sellout'->>'return_rows')::bigint=2
-     from public.product_variant_resolutions where run_id=v_run and product_code='225887'),
-    'negative Sellout returns are not positive LPU evidence and therefore remain PARTIAL/null rather than becoming a false conflict'
-  );
-  perform pg_temp.assert_true(
-    (select quantity_uom='KL' and quantity_uom_resolution_state='RESOLVED' and quantity_uom_source='PRODUCT_CONVERSION'
-     from public.product_variant_resolutions where run_id=v_run and product_code='100001'),
-    'conversion evidence resolves the product quantity UOM without guessing units-per-case or unit volume'
-  );
-  select active_run_id into v_old_product_head from public.product_domain_heads where scope_key='P03-TEST';
 
-  -- Same publications are idempotent.
-  v_result := public.materialize_current_product_domain('P03-TEST');
-  perform pg_temp.assert_true((v_result->>'reused')::boolean and (v_result->>'run_id')::uuid=v_old_product_head, 'same source publications reuse the current product run');
-  reset role;
-
-  -- One product code cannot carry two quantity UOMs inside the conversion graph.
-  -- Reject the new run and preserve the prior current head.
-  v_uom_conflict_batch := pg_temp.seed_published_product_batch(v_admin,v_conversion_contract,'PRODUCT_CONVERSION','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','300001','Miktar',1,'Temel ölçü birimi','KL','Oluşan Ürün Kodu','300002','Miktar__2',2,'Temel ölçü birimi__2','ADT'),
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','300001','Miktar',1,'Temel ölçü birimi','ADT','Oluşan Ürün Kodu','300003','Miktar__2',4,'Temel ölçü birimi__2','ADT')
-  ),'0');
-  set local role authenticated;
-  perform set_config('request.jwt.claim.role','authenticated',true);
-  perform set_config('request.jwt.claim.sub',v_admin::text,true);
-  begin
-    perform public.materialize_current_product_domain('P03-TEST');
-  exception when check_violation then
-    v_uom_rejected := true;
-  end;
-  perform pg_temp.assert_true(v_uom_rejected, 'conflicting quantity UOM evidence is rejected');
-  perform pg_temp.assert_true((select active_run_id=v_old_product_head from public.product_domain_heads where scope_key='P03-TEST'), 'UOM failure keeps prior canonical product head');
-  perform pg_temp.assert_true((select bool_and(valid_to is null) from public.product_variant_resolutions where run_id=v_old_product_head), 'UOM failure does not close prior product validity period');
-  reset role;
-
-  -- A conversion component with contradictory factor paths is unusable even
-  -- when it has no direct LPU anchor. Reject it without replacing current truth.
-  v_inconsistent_conversion_batch := pg_temp.seed_published_product_batch(v_admin,v_conversion_contract,'PRODUCT_CONVERSION','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','200001','Miktar',1,'Temel ölçü birimi','ADT','Oluşan Ürün Kodu','200002','Miktar__2',2,'Temel ölçü birimi__2','ADT'),
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','200002','Miktar',1,'Temel ölçü birimi','ADT','Oluşan Ürün Kodu','200003','Miktar__2',2,'Temel ölçü birimi__2','ADT'),
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','200001','Miktar',1,'Temel ölçü birimi','ADT','Oluşan Ürün Kodu','200003','Miktar__2',5,'Temel ölçü birimi__2','ADT')
-  ),'f');
-  set local role authenticated;
-  perform set_config('request.jwt.claim.role','authenticated',true);
-  perform set_config('request.jwt.claim.sub',v_admin::text,true);
-  begin
-    perform public.materialize_current_product_domain('P03-TEST');
-  exception when check_violation then
-    v_factor_rejected := true;
-  end;
-  perform pg_temp.assert_true(v_factor_rejected, 'internally inconsistent conversion factor paths are rejected without requiring an LPU anchor');
-  perform pg_temp.assert_true((select active_run_id=v_old_product_head from public.product_domain_heads where scope_key='P03-TEST'), 'factor-path failure keeps prior canonical product head');
-  perform pg_temp.assert_true((select bool_and(valid_to is null) from public.product_variant_resolutions where run_id=v_old_product_head), 'factor-path failure does not close prior product validity period');
-  reset role;
-
-  -- Publish a known rejected conversion mapping and prove materialization refuses it
-  -- without replacing the prior canonical product-domain head.
-  v_bad_conversion_batch := pg_temp.seed_published_product_batch(v_admin,v_conversion_contract,'PRODUCT_CONVERSION','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Üretim yeri','P03-TEST','Bozulan/Birleştirilen Ürün Kodu','154558','Miktar',1,'Temel ölçü birimi','KL','Oluşan Ürün Kodu','150003','Miktar__2',2,'Temel ölçü birimi__2','ADT')
-  ),'d');
-
-  set local role authenticated;
-  perform set_config('request.jwt.claim.role','authenticated',true);
-  perform set_config('request.jwt.claim.sub',v_admin::text,true);
-  begin
-    perform public.materialize_current_product_domain('P03-TEST');
-  exception when check_violation then
-    v_rejected := true;
-  end;
-  perform pg_temp.assert_true(v_rejected, 'known bad 154558/154559 -> 150003 mapping is rejected');
-  perform pg_temp.assert_true((select active_run_id=v_old_product_head from public.product_domain_heads where scope_key='P03-TEST'), 'failed materialization keeps prior canonical product head');
-  perform pg_temp.assert_true((select bool_and(valid_to is null) from public.product_variant_resolutions where run_id=v_old_product_head), 'failed materialization does not close prior product validity period');
-
-  -- A manually declared batch scope cannot relabel rows whose workbook-carried
-  -- distributor scope belongs somewhere else.
-  reset role;
-  v_wrong_scope_sellout_batch := pg_temp.seed_published_product_batch(v_admin,v_sellout_contract,'SELLOUT','P03-TEST',jsonb_build_array(
-    jsonb_build_object('Bayi/Distribütör','OTHER-SCOPE','Malzeme Kodu','100002','Malzeme Tnm.','Variant B','Mal Grubu Tnm.','Family One','Miktar',2,'Litre',1,'Faturalama Tarihi',46002)
-  ),'e');
-  set local role authenticated;
-  perform set_config('request.jwt.claim.role','authenticated',true);
-  perform set_config('request.jwt.claim.sub',v_admin::text,true);
-  begin
-    perform public.materialize_current_product_domain('P03-TEST');
-  exception when invalid_parameter_value then
-    v_scope_rejected := true;
-  end;
-  perform pg_temp.assert_true(v_scope_rejected, 'embedded source scope mismatch is rejected');
-  perform pg_temp.assert_true((select active_run_id=v_old_product_head from public.product_domain_heads where scope_key='P03-TEST'), 'scope mismatch keeps prior canonical product head');
-  perform pg_temp.assert_true((select bool_and(valid_to is null) from public.product_variant_resolutions where run_id=v_old_product_head), 'scope mismatch does not close prior product validity period');
-
-  -- Admin raw/base access works.
-  perform pg_temp.assert_true((select count(*)>0 from public.product_variant_resolutions where run_id=v_old_product_head), 'admin can read product resolution evidence');
-
-  -- Viewer gets only the bounded business surface, not raw/base evidence tables.
-  perform set_config('request.jwt.claim.sub',v_viewer::text,true);
+  -- paket.xlsx is not a runtime/user-upload contract anymore.
   perform pg_temp.assert_true(
-    (select count(*)=0 from public.product_domain_runs)
-    and (select count(*)=0 from public.product_domain_heads)
-    and (select count(*)=0 from public.product_conversion_edges)
-    and (select count(*)=0 from public.product_families)
-    and (select count(*)=0 from public.product_variant_resolutions)
-    and (select count(*)=0 from public.product_variants),
-    'viewer cannot read Package 03 base/provenance tables directly'
+    not exists(select 1 from public.source_contract_versions where source_kind='PRODUCT_CONVERSION' and is_active),
+    'PRODUCT_CONVERSION upload contract must be retired'
   );
-  perform pg_temp.assert_true((select count(*)=8 from public.read_current_product_business_surface() where scope_key='P03-TEST'), 'viewer-safe product business surface remains readable');
-  perform pg_temp.assert_true((select lpu is null and lpu_resolution_state='PARTIAL' and lpu_verification_state='missing' from public.read_current_product_business_surface() where scope_key='P03-TEST' and product_code='225887'), 'viewer surface preserves return-only missing/null LPU truth');
+
+  -- Standard direction: 12 L main product 150021; 6 L / 3 L split codes collapse into it.
+  perform pg_temp.assert_true(public.canonical_product_code('1237','150021')='150021', '150021 remains canonical');
+  perform pg_temp.assert_true(public.canonical_product_code('1237','154525')='150021', '154525 split code normalizes to 150021');
+  perform pg_temp.assert_true(public.canonical_product_code('1237','154548')='150021', '154548 split code normalizes to 150021');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','154525',1)=0.5, '154525 exact factor is 1/2 of 150021');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','154548',1)=0.25, '154548 exact factor is 1/4 of 150021');
+
+  -- Exact backend math stays fractional. Only presentation rounds the copy.
+  with stock(raw_code, raw_quantity) as (
+    values ('150021'::text,10::numeric), ('154525',1), ('154548',1)
+  )
+  select sum(public.canonical_product_quantity('1237',raw_code,raw_quantity))
+  into v_exact
+  from stock;
+  v_display := round(v_exact);
+  perform pg_temp.assert_true(v_exact=10.75, 'backend canonical quantity must remain exact 10.75');
+  perform pg_temp.assert_true(v_display=11, 'UX display may round exact 10.75 to 11');
+  perform pg_temp.assert_true(v_exact*12=129, 'litre math must use 10.75, not rounded 11');
+
+  -- FKNS semantics: selling any split code fulfills the same canonical product at the point;
+  -- the same customer is counted once even if main and split codes were both sold.
+  with sales(customer_id, raw_code, raw_quantity) as (
+    values
+      ('5000000001'::text,'154548'::text,1::numeric),
+      ('5000000001','150021',1),
+      ('5000000002','154525',1),
+      ('5000000003','999999',1)
+  ), normalized as (
+    select customer_id, public.canonical_product_code('1237',raw_code) as canonical_code
+    from sales where raw_quantity > 0
+  )
+  select count(distinct customer_id) into v_fkns
+  from normalized where canonical_code='150021';
+  perform pg_temp.assert_true(v_fkns=2, 'FKNS must count split/main sales as the same product and unique customer once');
+
+  -- High alcohol runs in the opposite direction: case/multipack -> single retail code.
+  perform pg_temp.assert_true(public.canonical_product_code('1237','152224')='152315', 'high-alcohol case code 152224 normalizes to single code 152315');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','152224',1)=24, 'one 152224 case equals exactly 24 canonical 152315 units');
+  perform pg_temp.assert_true(public.canonical_product_code('1237','152315')='152315', 'single high-alcohol code remains canonical');
+  perform pg_temp.assert_true(public.canonical_product_code('1237','152747')='152755', 'Mercan high-alcohol case normalizes to single code');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','152747',1)=24, 'Mercan case-to-single factor is exact 24');
+
+  -- Corona has two physically equal full-case codes; observed sellout main code 152471 is canonical.
+  perform pg_temp.assert_true(public.canonical_product_code('1237','152417')='152471', 'equal-size Corona legacy/full code collapses to observed canonical 152471');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','152417',1)=1, 'equal-size Corona code is one canonical unit');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','152733',1)=0.25, 'Corona split pack is quarter of canonical unit');
+
+  -- Unknown codes remain identity so products outside paket.xlsx are never silently dropped.
+  perform pg_temp.assert_true(public.canonical_product_code('1237','999999')='999999', 'unmapped product code remains identity');
+  perform pg_temp.assert_true(public.canonical_product_quantity('1237','999999',3.5)=3.5, 'unmapped quantity remains exact identity');
+
+  -- Every edge must conserve exact canonical quantity under the frozen mapping.
+  perform pg_temp.assert_true(not exists (
+    select 1
+    from public.product_conversion_reference_edges e
+    join public.product_canonical_mappings s on s.reference_version_id=e.reference_version_id and s.raw_product_code=e.source_product_code
+    join public.product_canonical_mappings t on t.reference_version_id=e.reference_version_id and t.raw_product_code=e.target_product_code
+    where e.reference_version_id=v_ref
+      and e.source_quantity_basis::numeric*s.canonical_quantity_numerator::numeric*t.canonical_quantity_denominator::numeric
+       <> e.target_quantity_basis::numeric*t.canonical_quantity_numerator::numeric*s.canonical_quantity_denominator::numeric
+  ), 'all 59 conversion relations must conserve exact canonical quantity');
+
+  -- No standalone Product Master viewer API / technical conversion surface.
   perform pg_temp.assert_true(
-    (select variant_count=8 and product_name_resolved=5 and product_name_partial=3 and product_name_blocked=0
-      and lpu_resolved=5 and lpu_partial=3 and lpu_blocked=0
-      and quantity_uom_resolved=4 and quantity_uom_partial=4 and quantity_uom_blocked=0
-      and lpu_cross_source_compared=2 and lpu_source_variance_nonzero=1
-      and lpu_cross_source_verified=1 and lpu_sellout_verified=1 and lpu_ka_verified=2 and lpu_derived_pending=1 and lpu_missing=3
-     from public.read_current_product_domain_summary() where scope_key='P03-TEST'),
-    'viewer-safe product summary exposes exact coverage and LPU source-variance state counts'
+    not has_function_privilege('authenticated','public.read_current_product_business_surface()','EXECUTE'),
+    'authenticated viewer must not execute deprecated product business surface'
   );
-  reset role;
+  perform pg_temp.assert_true(
+    not has_function_privilege('authenticated','public.read_current_product_domain_summary()','EXECUTE'),
+    'authenticated viewer must not execute deprecated product summary surface'
+  );
+  perform pg_temp.assert_true(
+    not has_function_privilege('authenticated','public.resolve_canonical_product(text,text)','EXECUTE')
+    and not has_function_privilege('authenticated','public.canonical_product_code(text,text)','EXECUTE')
+    and not has_function_privilege('authenticated','public.canonical_product_quantity(text,text,numeric)','EXECUTE')
+    and not has_function_privilege('authenticated','public.current_canonical_product_lpu(text)','EXECUTE')
+    and not has_function_privilege('authenticated','public.canonical_product_lpu(text,text)','EXECUTE'),
+    'canonicalization and LPU helpers are internal calculation infrastructure, not a viewer API'
+  );
+  perform pg_temp.assert_true(
+    not has_function_privilege('authenticated','public.materialize_current_product_domain(text)','EXECUTE'),
+    'legacy runtime PRODUCT_CONVERSION materializer must not remain callable after static-reference cutover'
+  );
+
+  select count(*) into v_canonical_rows
+  from public.product_canonical_mappings m
+  where m.reference_version_id=v_ref
+    and m.raw_product_code=m.canonical_product_code
+    and m.canonical_quantity_numerator=m.canonical_quantity_denominator;
+  perform pg_temp.assert_true(v_canonical_rows=36, 'every canonical product has one exact identity row');
 end;
 $$;
 

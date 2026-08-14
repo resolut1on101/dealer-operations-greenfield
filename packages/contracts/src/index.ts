@@ -14,6 +14,26 @@ export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U', '03'])
 export const productCodeSchema = z.string().regex(/^[0-9]+$/)
 export type ProductCode = z.infer<typeof productCodeSchema>
 
+export const productCanonicalizationPolicySchema = z.enum(['STANDARD', 'HIGH_ALCOHOL', 'IDENTITY'])
+export type ProductCanonicalizationPolicy = z.infer<typeof productCanonicalizationPolicySchema>
+
+export const productCanonicalMappingSchema = z.object({
+  scopeKey: z.string().min(1),
+  referenceVersion: z.string().min(1),
+  rawProductCode: productCodeSchema,
+  canonicalProductCode: productCodeSchema,
+  canonicalQuantityNumerator: z.number().int().positive(),
+  canonicalQuantityDenominator: z.number().int().positive(),
+  normalizationPolicy: productCanonicalizationPolicySchema,
+})
+export type ProductCanonicalMapping = z.infer<typeof productCanonicalMappingSchema>
+
+// Presentation-only helper. The exact canonical quantity must remain the calculation input.
+export function roundCanonicalQuantityForDisplay(exactCanonicalQuantity: number) {
+  if (!Number.isFinite(exactCanonicalQuantity)) throw new Error('Canonical quantity must be finite')
+  return Math.round(exactCanonicalQuantity)
+}
+
 export const productResolutionStateSchema = z.enum(['RESOLVED', 'PARTIAL', 'BLOCKED'])
 export type ProductResolutionState = z.infer<typeof productResolutionStateSchema>
 
@@ -99,6 +119,57 @@ export const productBusinessRowSchema = z.object({
   }
 })
 export type ProductBusinessRow = z.infer<typeof productBusinessRowSchema>
+
+export const productDomainFreshnessStateSchema = z.enum(['FRESH', 'STALE', 'BLOCKED', 'PENDING_SOURCES'])
+export type ProductDomainFreshnessState = z.infer<typeof productDomainFreshnessStateSchema>
+
+export const productDomainFreshnessSchema = z.object({
+  scopeKey: z.string().min(1),
+  freshnessState: productDomainFreshnessStateSchema,
+  freshnessError: z.string().nullable(),
+  isFresh: z.boolean(),
+  staleSince: z.string().datetime().nullable(),
+  lastAttemptedAt: z.string().datetime().nullable(),
+})
+export type ProductDomainFreshness = z.infer<typeof productDomainFreshnessSchema>
+
+export const productDomainSummarySchema = z.object({
+  scopeKey: z.string().min(1),
+  variantCount: z.number().int().nonnegative(),
+  conversionObservationCount: z.number().int().nonnegative(),
+  conversionProductCount: z.number().int().nonnegative(),
+  conversionComponentCount: z.number().int().nonnegative(),
+  directedEdgeCount: z.number().int().nonnegative(),
+  familyCount: z.number().int().nonnegative(),
+  productNameResolved: z.number().int().nonnegative(),
+  productNamePartial: z.number().int().nonnegative(),
+  productNameBlocked: z.number().int().nonnegative(),
+  familyResolved: z.number().int().nonnegative(),
+  familyPartial: z.number().int().nonnegative(),
+  familyBlocked: z.number().int().nonnegative(),
+  familyResolutionCoverage: z.number().nullable(),
+  quantityUomResolved: z.number().int().nonnegative(),
+  quantityUomPartial: z.number().int().nonnegative(),
+  quantityUomBlocked: z.number().int().nonnegative(),
+  lpuResolved: z.number().int().nonnegative(),
+  lpuPartial: z.number().int().nonnegative(),
+  lpuBlocked: z.number().int().nonnegative(),
+  litreResolutionCoverage: z.number().nullable(),
+  lpuSellout: z.number().int().nonnegative(),
+  lpuKa: z.number().int().nonnegative(),
+  lpuGraph: z.number().int().nonnegative(),
+  lpuCrossSourceVerified: z.number().int().nonnegative(),
+  lpuSelloutVerified: z.number().int().nonnegative(),
+  lpuKaVerified: z.number().int().nonnegative(),
+  lpuDerivedPending: z.number().int().nonnegative(),
+  lpuMissing: z.number().int().nonnegative(),
+  lpuCrossSourceCompared: z.number().int().nonnegative(),
+  lpuSourceVarianceNonzero: z.number().int().nonnegative(),
+  volumeTrackedTrue: z.number().int().nonnegative(),
+  volumeTrackedUnknown: z.number().int().nonnegative(),
+})
+export type ProductDomainSummary = z.infer<typeof productDomainSummarySchema>
+
 export const customerStatusSchema = z.enum(['ACTIVE', 'PASSIVE', 'CANCELLED', 'UNKNOWN'])
 export type CustomerStatus = z.infer<typeof customerStatusSchema>
 export const customerChannelSchema = z.enum(['OPEN', 'CLOSED', 'UNCLASSIFIED'])

@@ -1,50 +1,35 @@
-# Package 03 — Kullanıcı Test Kartı
+# Package 03 — Canonical Product Normalization Test Card
 
-Status before user test: `LIVE_TESTING`
+Package 03 is backend-only product normalization infrastructure. There is no standalone Package 03U Product Master screen.
 
-Package 03 is a backend/domain package; Product Master UX belongs to Package 03U. User acceptance therefore verifies the published product truth and that existing application behavior remains intact. Package 03 must not be marked `ACCEPTED` until the user explicitly says `PASS`.
+## Fixed reference evidence
 
-## Test data / scope
+- `paket.xlsx` is **not uploadable** and is not a runtime publication source.
+- Exact evidence SHA-256: `51fb373ca178b68a8ddd29a6ea8f65f54162137c78aaccfb9b7f93805ffffdf2`.
+- Frozen reference: `paket-51fb373c-v1`.
+- Evidence invariants: `331 observations / 84 product codes / 59 stable directed relations / 36 canonical products`.
 
-Scope: `1237`
+## Runtime source roles
 
-Published sources must be the exact current files:
+- Sellout = Geleneksel channel sales.
+- KA İrsaliye = Modern/KA channel sales.
+- Warehouse stock is a separate current-stock source in Package 03A.
 
-- `PRODUCT_CONVERSION` → `paket.xlsx`
-- `SELLOUT` → `Sellout Raporu (5).xlsx`
-- `KA_DELIVERY` → `İrsaliye Listesi (2).xlsx`
+## Acceptance invariants
 
-## User-visible acceptance points
+1. `PRODUCT_CONVERSION` is retired/inactive and `paket.xlsx` cannot be recognized as a new Upload Center source.
+2. Standard/Bira split codes normalize to one main canonical code. Example: `154525 -> 1/2 × 150021`, `154548 -> 1/4 × 150021`.
+3. High-alcohol/Distile direction is reversed. Example: `152224 -> 24 × 152315` and canonical code is `152315`.
+4. The 59 reference relations exactly conserve canonical quantity; no factor is inferred from product-name similarity.
+5. A split-code sale fulfills FKNS for the same canonical product; one customer/point is counted once even if main and split codes both appear.
+6. Sellout, KA, warehouse stock, stock days, target, forecast, safety stock and order need must consume canonical identity/quantity before product aggregation.
+7. Backend quantities remain exact decimals/rationals. `10.75` stays `10.75` for all calculations. UX may display `11` only as presentation.
+8. Unmapped product codes remain identity and are not dropped.
+9. Technical mapping/reference tables remain admin/audit only; normal viewer has no Product Master/variant/LPU surface.
+10. Runtime normalization readiness depends on active static reference + current Sellout + current KA; no runtime `paket.xlsx` publication is required.
 
-1. Upload Center still opens and normal Package 01 upload/publication behavior is not broken.
-2. The three Package 03 source kinds can be recognized/published under scope `1237` without the duplicate `Miktar` columns in `paket.xlsx` overwriting each other.
-3. Technical LIVE proof reports exactly:
-   - 136 product variants
-   - 331 conversion observations
-   - 84 conversion products
-   - 59 directed conversion relations
-   - 36 conversion components
-   - 25 business product families
-4. Product-name states are exactly `111 RESOLVED / 25 PARTIAL / 0 BLOCKED`.
-5. Family states are exactly `114 RESOLVED / 22 PARTIAL / 0 BLOCKED`.
-6. Active-LPU states are exactly `109 RESOLVED / 27 PARTIAL / 0 BLOCKED`.
-7. Active-LPU source counts are exactly `71 Sellout / 18 KA / 20 conversion graph`.
-8. The 22 products that have only negative Sellout return rows remain `PARTIAL / NULL`; they must not be turned into positive LPU evidence. `225887` is a spot-check example.
-9. The five conversion products without an absolute anchor remain `PARTIAL / NULL`: `150783`, `151942`, `151943`, `152225`, `152316`.
-10. Product `151428` keeps Sellout as the active source while the small KA source variance remains visible; the system must not silently replace the Sellout coefficient or invent a tolerance.
-11. Quantity-UOM resolution is exactly `84 RESOLVED / 52 PARTIAL / 0 BLOCKED`; the 84 graph products have one stable UOM.
-12. Viewer users cannot directly read Package 03 base/provenance tables; the bounded business/summary RPCs remain readable.
-13. Existing Package 02U Customers/Organization remains functional after deploy.
+## Result
 
-## PASS rule
-
-If the LIVE technical report proves the exact invariants above and the application has no regression, user may reply:
-
-`PASS`
-
-Result:
-- `Package 03 = ACCEPTED` (Approved on 2026-08-14)
-- `Technical release = PASS`
-- `Production UAT = PASS`
-- `Package 03U = UNBLOCKED`
-
+- `Package 03 = backend canonicalization layer`
+- `Package 03U = CANCELLED_NOT_REQUIRED`
+- next user-facing product surfaces are operational modules (warehouse stock, Sellout, FKNS, planning).

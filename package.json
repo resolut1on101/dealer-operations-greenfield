@@ -26,9 +26,11 @@
     "deploy:live": "node scripts/deploy-live.mjs",
     "review:zip": "node scripts/create-review-zip.mjs",
     "test:e2e": "playwright test",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:product-reference-static",
     "supabase": "supabase",
-    "test:product-domain": "node scripts/test-package-03-product-domain.mjs"
+    "test:product-domain": "node scripts/test-package-03-product-domain.mjs",
+    "test:product-concurrency": "node scripts/test-package-03-concurrency.mjs",
+    "test:product-reference-static": "node scripts/test-package-03-reference-static.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

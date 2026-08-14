@@ -34,3 +34,7 @@ jobs:
       - run: npm run supabase -- start -x studio,imgproxy,logflare,vector
       - run: npm run supabase -- db reset --local
       - run: npm run test:rls
+      - run: npm run test:import
+      - run: npm run test:customer-domain
+      - run: npm run test:product-domain
+      - run: npm run test:product-concurrency
