@@ -38,3 +38,4 @@ jobs:
       - run: npm run test:customer-domain
       - run: npm run test:product-domain
       - run: npm run test:product-concurrency
+      - run: npm run test:warehouse-stock

@@ -30,7 +30,8 @@
     "supabase": "supabase",
     "test:product-domain": "node scripts/test-package-03-product-domain.mjs",
     "test:product-concurrency": "node scripts/test-package-03-concurrency.mjs",
-    "test:product-reference-static": "node scripts/test-package-03-reference-static.mjs"
+    "test:product-reference-static": "node scripts/test-package-03-reference-static.mjs",
+    "test:warehouse-stock": "node scripts/test-package-03a-warehouse-stock.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

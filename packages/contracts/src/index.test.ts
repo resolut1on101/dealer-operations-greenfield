@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productCanonicalMappingSchema, productDomainFreshnessSchema, productDomainFreshnessStateSchema, productDomainSummarySchema, productResolutionStateSchema, roundCanonicalQuantityForDisplay, sourceContractSignatureSchema } from './index'
+import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productCanonicalMappingSchema, productDomainFreshnessSchema, productDomainFreshnessStateSchema, productDomainSummarySchema, productResolutionStateSchema, roundCanonicalQuantityForDisplay, sourceContractSignatureSchema, warehouseStockBusinessRowSchema, warehouseStockSummarySchema } from './index'
 
 describe('application role contract', () => {
   it('permits only admin and viewer', () => {
@@ -146,5 +146,35 @@ describe('Package 03 product contracts', () => {
       volumeTrackedTrue: 10, volumeTrackedUnknown: 0,
     })
     expect(summary.variantCount).toBe(10)
+  })
+})
+
+
+describe('Package 03A warehouse stock contracts', () => {
+  it('keeps exact quantity separate from litre resolution and never fabricates missing litres', () => {
+    const resolved = warehouseStockBusinessRowSchema.parse({
+      scopeKey: '1237', productCode: '150021', productName: 'EFES PİLSEN TVA 50 CL KTU',
+      exactAvailableQuantity: 10.75, lpu: 12, availableLitres: 129,
+      litreResolutionState: 'RESOLVED', sourcePublishedAt: '2026-08-14T11:00:00.000Z',
+    })
+    expect(resolved.exactAvailableQuantity).toBe(10.75)
+    expect(resolved.availableLitres).toBe(129)
+
+    const partial = warehouseStockBusinessRowSchema.parse({
+      scopeKey: '1237', productCode: '3046', productName: 'TÜP EP CO2 (DEPOZİTOLU)',
+      exactAvailableQuantity: 45, lpu: null, availableLitres: null,
+      litreResolutionState: 'PARTIAL', sourcePublishedAt: '2026-08-14T11:00:00.000Z',
+    })
+    expect(partial.availableLitres).toBeNull()
+    expect(() => warehouseStockBusinessRowSchema.parse({ ...partial, availableLitres: 0 })).toThrow()
+  })
+
+  it('keeps the warehouse snapshot summary count-based instead of summing mixed product quantities', () => {
+    const summary = warehouseStockSummarySchema.parse({
+      scopeKey: '1237', businessRowCount: 63,
+      litreResolvedCount: 62, litrePartialCount: 1, sourcePublishedAt: '2026-08-14T11:00:00.000Z',
+    })
+    expect(summary.businessRowCount).toBe(63)
+    expect('totalQuantity' in summary).toBe(false)
   })
 })

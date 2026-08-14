@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { disambiguateSourceHeaders, parseSourceMatrix } from './source-parser'
+import { disambiguateSourceHeaders, parseSourceMatrix, sourceHeaderSignatureMatches } from './source-parser'
 
 describe('source workbook header preservation', () => {
   it('keeps duplicate Excel headers as deterministic positional aliases', () => {
@@ -25,6 +25,16 @@ describe('source workbook header preservation', () => {
       'Oluşan Ürün Kodu': 154505,
       Miktar__2: 20,
     }])
+  })
+
+
+
+  it('requires the exact three-column Malzemeler signature for WAREHOUSE_STOCK', () => {
+    const expected = ['Malzeme numarası', 'Malzeme tanımı', 'Tahditsiz kullanılabilir']
+    expect(sourceHeaderSignatureMatches(expected, expected, true)).toBe(true)
+    expect(sourceHeaderSignatureMatches([...expected, 'Unexpected'], expected, true)).toBe(false)
+    expect(sourceHeaderSignatureMatches([expected[1], expected[0], expected[2]], expected, true)).toBe(false)
+    expect(sourceHeaderSignatureMatches([...expected, 'Unexpected'], expected, false)).toBe(true)
   })
 
   it('leaves existing unique source contracts unchanged', () => {

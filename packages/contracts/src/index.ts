@@ -9,7 +9,7 @@ export type ApplicationRole = z.infer<typeof applicationRoleSchema>
 export const releaseStateSchema = z.enum(['LIVE_TESTING', 'VERIFIED', 'BLOCKED'])
 export type ReleaseState = z.infer<typeof releaseStateSchema>
 
-export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U', '03'])
+export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U', '03', '03A'])
 
 export const productCodeSchema = z.string().regex(/^[0-9]+$/)
 export type ProductCode = z.infer<typeof productCodeSchema>
@@ -132,6 +132,38 @@ export const productDomainFreshnessSchema = z.object({
   lastAttemptedAt: z.string().datetime().nullable(),
 })
 export type ProductDomainFreshness = z.infer<typeof productDomainFreshnessSchema>
+
+
+export const warehouseStockLitreResolutionStateSchema = z.enum(['RESOLVED', 'PARTIAL'])
+export type WarehouseStockLitreResolutionState = z.infer<typeof warehouseStockLitreResolutionStateSchema>
+
+export const warehouseStockBusinessRowSchema = z.object({
+  scopeKey: z.string().min(1),
+  productCode: productCodeSchema,
+  productName: z.string().min(1).nullable(),
+  exactAvailableQuantity: z.number().finite(),
+  lpu: z.number().positive().nullable(),
+  availableLitres: z.number().finite().nullable(),
+  litreResolutionState: warehouseStockLitreResolutionStateSchema,
+  sourcePublishedAt: z.string().datetime(),
+}).superRefine((row, context) => {
+  if (row.litreResolutionState === 'RESOLVED' && (row.lpu === null || row.availableLitres === null)) {
+    context.addIssue({ code: 'custom', message: 'resolved warehouse stock litres require LPU and litres', path: ['availableLitres'] })
+  }
+  if (row.litreResolutionState === 'PARTIAL' && (row.lpu !== null || row.availableLitres !== null)) {
+    context.addIssue({ code: 'custom', message: 'partial warehouse stock litres must remain null', path: ['availableLitres'] })
+  }
+})
+export type WarehouseStockBusinessRow = z.infer<typeof warehouseStockBusinessRowSchema>
+
+export const warehouseStockSummarySchema = z.object({
+  scopeKey: z.string().min(1),
+  businessRowCount: z.number().int().nonnegative(),
+  litreResolvedCount: z.number().int().nonnegative(),
+  litrePartialCount: z.number().int().nonnegative(),
+  sourcePublishedAt: z.string().datetime(),
+})
+export type WarehouseStockSummary = z.infer<typeof warehouseStockSummarySchema>
 
 export const productDomainSummarySchema = z.object({
   scopeKey: z.string().min(1),

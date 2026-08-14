@@ -1,5 +1,18 @@
 export type SourceMatrix = unknown[][]
 
+
+export function sourceHeaderSignatureMatches(
+  headers: string[],
+  requiredHeaders: string[],
+  exact = false,
+) {
+  if (exact) {
+    return headers.length === requiredHeaders.length
+      && headers.every((header, index) => header === requiredHeaders[index])
+  }
+  return requiredHeaders.every((header) => headers.includes(header))
+}
+
 export function disambiguateSourceHeaders(headerRow: unknown[]): string[] {
   const counts = new Map<string, number>()
   const used = new Set<string>()

@@ -8,6 +8,7 @@ create or replace function pg_temp.create_and_publish_candidate(
   p_user_id uuid, p_contract_id uuid, p_source_kind text, p_scope_key text, p_rows jsonb, p_hash_char text
 ) returns uuid
 language plpgsql
+security definer
 as $$
 declare
   v_batch uuid := gen_random_uuid();

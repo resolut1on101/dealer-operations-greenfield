@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-const migration = readFileSync(new URL('../supabase/migrations/20260814000017_package_03_canonical_product_normalization.sql', import.meta.url), 'utf8')
+const migration = readFileSync(new URL('../supabase/migrations/20260814000017_package_03_canonical_product_normalization.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 function requireMatch(condition, message) {
   if (!condition) throw new Error(message)
