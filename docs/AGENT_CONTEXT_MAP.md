@@ -37,7 +37,8 @@ All agent-authored technical reports, acceptance records, audits, runbooks, arch
 | `00B`, `00C` | `00_OKUMA_SIRASI_VE_GREENFIELD_KURALLARI.md`, `KULLANICI_KABUL_VE_CANLI_TEST_PROTOKOLU.md`, current D0/UI spec; `VERITABANI_YENIDEN_TASARIM_PLANI.md` only for environment/recovery boundary |
 | `01`, `01U` | `VERITABANI_YENIDEN_TASARIM_PLANI.md`, decision register §22 Package 01, `KULLANICI_KABUL_VE_CANLI_TEST_PROTOKOLU.md` |
 | `02`, `02U` | decision register §§1–2 + §22 Package 02; matrix customer/org rows |
-| `03`, `03U` | decision register §5 + §22 Package 03; matrix `PRD-*` |
+| `03` | backend/internal canonical product normalization + frozen paket reference; decision register §5 + §22 Package 03; matrix `PRD-*`; no Product Master/Ürünler executor route |
+| `03U` | `CANCELLED_NOT_REQUIRED`; no standalone Product Master/Ürünler screen |
 | `03A`, `03AU` | decision register §6; `STOK_METRIK_KATALOGU.md` current-stock section; matrix `STK-*` |
 | `04`, `04U` | decision register §3; matrix `EVT-*`, `ACT-*`, `TGT-*`; stock catalog only if demand dependency is touched |
 | `04A` | decision register §19; matrix `STL-*` |
@@ -77,6 +78,8 @@ All agent-authored technical reports, acceptance records, audits, runbooks, arch
 - **Reports/artifacts:** financial catalog report sections → matrix report families.
 - **AI:** AI plan → matrix `AIENG-*` → only the domain metric docs used by the request.
 - **Manual correction/conflict:** decision register §10 → matrix `MAN-*`/`DQ-*` → affected domain only.
+
+Product-related user-facing work continues in operational packages `03A/03AU`, Sellout, FKNS, and planning. The binding router must not direct a future executor to Product Master/Ürünler screen development.
 
 ## 5. Historical/superseded handling
 

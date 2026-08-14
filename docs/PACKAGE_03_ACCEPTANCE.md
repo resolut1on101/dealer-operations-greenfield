@@ -4,7 +4,7 @@
 **Historical P03 Baseline:** `ACCEPTED`
 **Historical Technical Release:** `PASS`
 **Historical Production UAT:** `PASS`
-**2026-08-14 Canonicalization Correction:** `SOURCE_FIXED_PENDING_CANONICAL_RUNTIME_AND_USER_PASS`
+**2026-08-14 Canonicalization Correction:** `LIVE_TESTING_PENDING_USER_PASS`
 **Package 03U Status:** `CANCELLED_NOT_REQUIRED`
 **Acceptance Basis:** The original Package 03 production baseline was explicitly accepted. The canonicalization correction below is not marked accepted until canonical runtime gates and a new explicit user PASS are complete.
 
@@ -35,9 +35,12 @@
 
 ## 3. Final Decision
 
-The user completed production UAT and explicitly approved Package 03.
-Package 03 is closed as **`ACCEPTED`**.
-Package 03U is **`CANCELLED_NOT_REQUIRED`**. Package 03 remains an internal canonical product-normalization layer; no standalone Product Master UX is approved.
+The historical Package 03 baseline was accepted after its production UAT and remains historical evidence.
+
+The 2026-08-14 canonicalization correction is **not** closed as `ACCEPTED`. Its current state is **`LIVE_TESTING_PENDING_USER_PASS`**.
+
+Package 03 remains an internal canonical product-normalization layer with a frozen paket reference; no standalone Product Master/Ürünler UX is approved. Product-related user-facing work continues in operational packages `03A/03AU`, Sellout, FKNS, and planning.
+Package 03U remains **`CANCELLED_NOT_REQUIRED`**.
 
 
 ---
@@ -59,4 +62,15 @@ Forward migration `20260814000017_package_03_canonical_product_normalization.sql
 
 This correction does not create a new 03U screen. The next user-facing product-related surfaces belong to operational modules such as warehouse stock, Sellout and FKNS.
 
-**Correction acceptance state:** implementation/source evidence may be prepared and tested statically, but the correction remains pending until canonical-repo runtime/database gates pass, LIVE is updated with forward migration(s), and the user explicitly says PASS.
+**Correction acceptance state:** `LIVE_TESTING_PENDING_USER_PASS`
+
+For the current correction, the gate status is explicit:
+
+- source: ✅
+- PostgreSQL runtime: ✅
+- LIVE migration: ✅
+- LIVE smoke: ✅
+- concurrency: ✅
+- user explicit PASS: ⏳
+
+The correction therefore remains open pending the user’s explicit PASS; the historical accepted baseline does not close this current correction.
