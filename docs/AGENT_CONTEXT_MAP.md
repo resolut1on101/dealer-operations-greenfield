@@ -39,7 +39,7 @@ All agent-authored technical reports, acceptance records, audits, runbooks, arch
 | `02`, `02U` | decision register §§1–2 + §22 Package 02; matrix customer/org rows |
 | `03` | backend/internal canonical product normalization + frozen paket reference; decision register §5 + §22 Package 03; matrix `PRD-*`; no Product Master/Ürünler executor route |
 | `03U` | `CANCELLED_NOT_REQUIRED`; no standalone Product Master/Ürünler screen |
-| `03A`, `03AU` | `PACKAGE_03A_REAL_DATA_EVIDENCE.md`; decision register §6; `STOK_METRIK_KATALOGU.md` current-stock section; matrix `STK-*` |
+| `03A`, `03AU` | `PACKAGE_03A_REAL_DATA_EVIDENCE.md`, `PACKAGE_03A_ACCEPTANCE.md`; decision register §6; `STOK_METRIK_KATALOGU.md` current-stock section; matrix `STK-*` |
 | `04`, `04U` | decision register §3; matrix `EVT-*`, `ACT-*`, `TGT-*`; stock catalog only if demand dependency is touched |
 | `04A` | decision register §19; matrix `STL-*` |
 | `04B`, `04BU` | decision register §21; matrix/report rows relevant to Sellout comparison; do not load financial catalog unless a financial metric is explicitly requested |

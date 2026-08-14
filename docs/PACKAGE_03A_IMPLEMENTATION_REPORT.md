@@ -78,3 +78,19 @@ Not claimed as PASS in this sandbox:
 - PostgreSQL/Supabase runtime migration test, because no local Supabase runtime is available here.
 
 These are canonical-repo release gates, not reasons to change the Package 03A business design.
+
+## Canonical Acceptance and Closure (2026-08-14)
+
+**Final Status:** `PACKAGE03A_WAREHOUSE_STOCK_ACCEPTED` / `CLOSED`  
+**Acceptance Date:** `2026-08-14`  
+**User Acceptance:** `PASS`  
+
+### Gates Completed
+- **Source Contract & Canonical Normalization:** `PASS` (Exact 3-column `WAREHOUSE_STOCK v1`, `FULL_REPLACE`, 84 raw rows → 63 canonical business rows, standard split `150021 = 1216.25`, high-alcohol reverse `152327 = 197`, 31 identity codes preserved, 0 split leaks, missing LPU yields `NULL / PARTIAL`).
+- **PostgreSQL Runtime & Migration:** `PASS` (Transaction rehearsal PASS, forward migration `20260814000018_package_03a_warehouse_stock.sql` applied to LIVE target `ncwtlaiormtunpryxjmu`, DEV project `enlcfbbkfqijspxhngzo` untouched).
+- **Real Data Publication:** `PASS` (Supplied `Malzemeler` workbook SHA-256 `1cee1b283cbadf7839d14c30cb0ef5cd872438b236f94139d1ad13c9dd8efc9a` published under admin; publication ID `147367ed-7116-4755-aeb7-fcdae460b89d` for scope `1237`).
+- **Production Web Deployment:** `PASS` (Cloudflare Pages deployment ID `cc02275d-be19-4ef4-a272-57c59a648799`, production URL `https://dealer-operations-greenfield.pages.dev`, build `d5e6a26`).
+- **User Admin Acceptance:** `PASS` (Observed on LIVE: role admin, Upload Center loads and recognizes WAREHOUSE_STOCK v1, reaches READY, publication visible with 84 records and PUBLISHED status at 14.08.2026 14:57).
+- **User Viewer Acceptance:** `PASS` (Observed on LIVE: role viewer, read-only publication summary and provenance available, mutation/admin controls correctly absent, RLS isolation verified).
+
+Package 03A is formally **CLOSED**. The next planned package is `03AU — D4 Anlık Stok Görünümü UX/UI`.
