@@ -52,6 +52,14 @@ function asNullableNumber(value: Numeric | null, label: string): number | null {
   return value === null ? null : asNumber(value, label)
 }
 
+function normalizeApiDateTime(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Yayın zamanı geçersiz.')
+  }
+  return parsed.toISOString()
+}
+
 export function mapWarehouseStockRow(row: WarehouseStockDbRow): WarehouseStockBusinessRow {
   return warehouseStockBusinessRowSchema.parse({
     scopeKey: row.scope_key,
@@ -61,7 +69,7 @@ export function mapWarehouseStockRow(row: WarehouseStockDbRow): WarehouseStockBu
     lpu: asNullableNumber(row.lpu, 'Litre / Birim'),
     availableLitres: asNullableNumber(row.available_litres, 'Toplam litre'),
     litreResolutionState: row.litre_resolution_state,
-    sourcePublishedAt: row.source_published_at,
+    sourcePublishedAt: normalizeApiDateTime(row.source_published_at),
   })
 }
 
@@ -73,7 +81,7 @@ export function mapWarehouseStockUiSummary(row: WarehouseStockUiSummaryDbRow): W
     totalLitresState: row.total_litres_state,
     litreResolvedCount: asNumber(row.litre_resolved_count, 'Hesaplanan litre sayısı'),
     litrePartialCount: asNumber(row.litre_partial_count, 'Eksik litre sayısı'),
-    sourcePublishedAt: row.source_published_at,
+    sourcePublishedAt: normalizeApiDateTime(row.source_published_at),
   })
 }
 

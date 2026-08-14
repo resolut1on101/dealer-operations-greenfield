@@ -18,6 +18,44 @@ describe('Package 03AU warehouse stock UI mapping', () => {
     const summary = mapWarehouseStockUiSummary({ scope_key: '1237', business_row_count: '63', total_available_litres: null, total_litres_state: 'PARTIAL', litre_resolved_count: '58', litre_partial_count: '5', source_published_at: sourcePublishedAt })
     expect(summary.totalAvailableLitres).toBeNull()
   })
+  it('normalizes timezone-offset datetime strings into canonical UTC ISO values', () => {
+    const row = mapWarehouseStockRow({
+      scope_key: '1237',
+      product_code: '150021',
+      product_name: 'EFES PİLSEN',
+      exact_available_quantity: '10',
+      lpu: '12',
+      available_litres: '120',
+      litre_resolution_state: 'RESOLVED',
+      source_published_at: '2026-08-14T14:57:00+03:00',
+    })
+    expect(row.sourcePublishedAt).toBe('2026-08-14T11:57:00.000Z')
+
+    const summary = mapWarehouseStockUiSummary({
+      scope_key: '1237',
+      business_row_count: '63',
+      total_available_litres: '120',
+      total_litres_state: 'RESOLVED',
+      litre_resolved_count: '63',
+      litre_partial_count: '0',
+      source_published_at: '2026-08-14T14:57:00+03:00',
+    })
+    expect(summary.sourcePublishedAt).toBe('2026-08-14T11:57:00.000Z')
+  })
+  it('rejects invalid publication datetime strings', () => {
+    expect(() =>
+      mapWarehouseStockRow({
+        scope_key: '1237',
+        product_code: '150021',
+        product_name: 'EFES PİLSEN',
+        exact_available_quantity: '10',
+        lpu: '12',
+        available_litres: '120',
+        litre_resolution_state: 'RESOLVED',
+        source_published_at: 'not-a-date',
+      })
+    ).toThrow('Yayın zamanı geçersiz.')
+  })
 })
 
 describe('Package 03AU warehouse stock list behavior', () => {
