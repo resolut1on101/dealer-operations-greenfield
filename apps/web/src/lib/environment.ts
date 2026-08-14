@@ -12,10 +12,10 @@ const rawReleaseState = import.meta.env.VITE_RELEASE_STATE ?? 'BLOCKED'
 
 export const releaseState = releaseStateSchema.parse(rawReleaseState)
 export const releasePackage = packageIdentifierSchema.parse(
-  import.meta.env.VITE_RELEASE_PACKAGE ?? '03',
+  import.meta.env.VITE_RELEASE_PACKAGE ?? '03AU',
 )
 export const buildVersion = import.meta.env.VITE_BUILD_VERSION ?? 'dev'
-export const databaseMigrationVersion = import.meta.env.VITE_DB_MIGRATION_VERSION ?? '20260813000015'
+export const databaseMigrationVersion = import.meta.env.VITE_DB_MIGRATION_VERSION ?? '20260814000019'
 
 export const supabaseConfiguration = {
   url: import.meta.env.VITE_SUPABASE_URL,

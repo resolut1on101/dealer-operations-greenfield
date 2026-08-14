@@ -2,7 +2,7 @@
   "name": "dealer-operations-greenfield",
   "private": true,
   "version": "0.0.0",
-  "description": "Greenfield dealer operations platform — Package 00 technical foundation",
+  "description": "Greenfield dealer operations platform \u2014 Package 00 technical foundation",
   "packageManager": "npm@11.6.2",
   "workspaces": [
     "apps/*",
@@ -31,7 +31,8 @@
     "test:product-domain": "node scripts/test-package-03-product-domain.mjs",
     "test:product-concurrency": "node scripts/test-package-03-concurrency.mjs",
     "test:product-reference-static": "node scripts/test-package-03-reference-static.mjs",
-    "test:warehouse-stock": "node scripts/test-package-03a-warehouse-stock.mjs"
+    "test:warehouse-stock": "node scripts/test-package-03a-warehouse-stock.mjs",
+    "test:warehouse-stock-ui": "node scripts/test-package-03au-warehouse-stock-ui.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

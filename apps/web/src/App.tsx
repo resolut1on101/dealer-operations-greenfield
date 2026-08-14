@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ApplicationRole } from '@dealer-operations/contracts'
 import { UploadCenter } from './UploadCenter'
 import { CustomerWorkspace } from './CustomerWorkspace'
+import { WarehouseStockWorkspace } from './WarehouseStockWorkspace'
 import { applicationEnvironment, buildVersion, databaseMigrationVersion, isSupabaseConfigured, releasePackage, releaseState } from './lib/environment'
 import { supabase } from './lib/supabase'
 import { getVisibleNavGroups } from './lib/navigation'
@@ -51,7 +52,7 @@ export function App() {
     <aside className={`sidebar ${sidebarOpen ? 'open' : 'collapsed'} ${mobileNavOpen ? 'mobile-open' : ''}`} aria-label="Ana gezinme"><div className="brand-row"><span className="brand-mark" aria-hidden="true">DO</span><span className="brand-name">Dealer Operations</span><button className="icon-button collapse-button" type="button" aria-label="Yan menüyü daralt veya genişlet" onClick={() => setSidebarOpen((value) => !value)}>‹</button><button className="icon-button close-mobile" type="button" aria-label="Menüyü kapat" onClick={() => setMobileNavOpen(false)}>×</button></div><nav>{getVisibleNavGroups(role).map((group) => <section className="nav-group" key={group.label} aria-label={group.label}><h2>{group.label}</h2>{group.items.map((item) => <button className={activeItem === item ? 'nav-item active' : 'nav-item'} type="button" key={item} onClick={() => chooseItem(item)}><span className="nav-dot" aria-hidden="true" /><span>{item}</span></button>)}</section>)}</nav></aside>
     {mobileNavOpen ? <button className="scrim" type="button" aria-label="Menüyü kapat" onClick={() => setMobileNavOpen(false)} /> : null}
     <main className={`content ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`} aria-labelledby="page-title">
-      {activeItem === 'Veri Yükleme' && authenticated ? <UploadCenter role={role} /> : activeItem === 'Müşteriler' && authenticated ? <CustomerWorkspace role={role} /> : <AccessSurface role={role} email={email} password={password} setEmail={setEmail} setPassword={setPassword} loading={loadingAuth} authMessage={authMessage} onSignIn={signIn} />}
+      {activeItem === 'Veri Yükleme' && authenticated ? <UploadCenter role={role} /> : activeItem === 'Müşteriler' && authenticated ? <CustomerWorkspace role={role} /> : activeItem === 'Depo Stoku' && authenticated ? <WarehouseStockWorkspace role={role} /> : <AccessSurface role={role} email={email} password={password} setEmail={setEmail} setPassword={setPassword} loading={loadingAuth} authMessage={authMessage} onSignIn={signIn} />}
     </main>
   </div>
 }

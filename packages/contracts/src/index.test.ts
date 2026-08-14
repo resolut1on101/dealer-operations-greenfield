@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productCanonicalMappingSchema, productDomainFreshnessSchema, productDomainFreshnessStateSchema, productDomainSummarySchema, productResolutionStateSchema, roundCanonicalQuantityForDisplay, sourceContractSignatureSchema, warehouseStockBusinessRowSchema, warehouseStockSummarySchema } from './index'
+import { applicationRoleSchema, customerMasterRowSchema, customerStatusSchema, importChunkSchema, productBusinessRowSchema, productCanonicalMappingSchema, productDomainFreshnessSchema, productDomainFreshnessStateSchema, productDomainSummarySchema, productResolutionStateSchema, roundCanonicalQuantityForDisplay, sourceContractSignatureSchema, warehouseStockBusinessRowSchema, warehouseStockSummarySchema, warehouseStockUiSummarySchema, packageIdentifierSchema } from './index'
+
+describe('Package 03AU release contract', () => {
+  it('recognizes 03AU as a release package identifier', () => { expect(packageIdentifierSchema.parse('03AU')).toBe('03AU') })
+})
 
 describe('application role contract', () => {
   it('permits only admin and viewer', () => {
@@ -176,5 +180,17 @@ describe('Package 03A warehouse stock contracts', () => {
     })
     expect(summary.businessRowCount).toBe(63)
     expect('totalQuantity' in summary).toBe(false)
+  })
+})
+
+describe('Package 03AU warehouse stock UI contracts', () => {
+  it('keeps official total litres null while the current snapshot is partial', () => {
+    const partial = warehouseStockUiSummarySchema.parse({ scopeKey: '1237', businessRowCount: 63, totalAvailableLitres: null, totalLitresState: 'PARTIAL', litreResolvedCount: 58, litrePartialCount: 5, sourcePublishedAt: '2026-08-14T11:57:00.000Z' })
+    expect(partial.totalAvailableLitres).toBeNull()
+    expect(() => warehouseStockUiSummarySchema.parse({ ...partial, totalAvailableLitres: 100 })).toThrow()
+  })
+  it('requires a numeric authoritative total when resolved', () => {
+    const resolved = warehouseStockUiSummarySchema.parse({ scopeKey: '1237', businessRowCount: 63, totalAvailableLitres: 15342.792, totalLitresState: 'RESOLVED', litreResolvedCount: 63, litrePartialCount: 0, sourcePublishedAt: '2026-08-14T11:57:00.000Z' })
+    expect(resolved.totalAvailableLitres).toBe(15342.792)
   })
 })

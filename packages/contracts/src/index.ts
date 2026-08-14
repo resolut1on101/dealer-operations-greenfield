@@ -9,7 +9,7 @@ export type ApplicationRole = z.infer<typeof applicationRoleSchema>
 export const releaseStateSchema = z.enum(['LIVE_TESTING', 'VERIFIED', 'BLOCKED'])
 export type ReleaseState = z.infer<typeof releaseStateSchema>
 
-export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U', '03', '03A'])
+export const packageIdentifierSchema = z.enum(['00C', '01', '02', '02U', '03', '03A', '03AU'])
 
 export const productCodeSchema = z.string().regex(/^[0-9]+$/)
 export type ProductCode = z.infer<typeof productCodeSchema>
@@ -164,6 +164,23 @@ export const warehouseStockSummarySchema = z.object({
   sourcePublishedAt: z.string().datetime(),
 })
 export type WarehouseStockSummary = z.infer<typeof warehouseStockSummarySchema>
+
+export const warehouseStockUiTotalLitresStateSchema = z.enum(['RESOLVED', 'PARTIAL'])
+export type WarehouseStockUiTotalLitresState = z.infer<typeof warehouseStockUiTotalLitresStateSchema>
+
+export const warehouseStockUiSummarySchema = z.object({
+  scopeKey: z.string().min(1),
+  businessRowCount: z.number().int().nonnegative(),
+  totalAvailableLitres: z.number().finite().nullable(),
+  totalLitresState: warehouseStockUiTotalLitresStateSchema,
+  litreResolvedCount: z.number().int().nonnegative(),
+  litrePartialCount: z.number().int().nonnegative(),
+  sourcePublishedAt: z.string().datetime(),
+}).superRefine((row, context) => {
+  if (row.totalLitresState === 'RESOLVED' && row.totalAvailableLitres === null) context.addIssue({ code: 'custom', message: 'resolved official total litres requires a numeric total', path: ['totalAvailableLitres'] })
+  if (row.totalLitresState === 'PARTIAL' && row.totalAvailableLitres !== null) context.addIssue({ code: 'custom', message: 'partial official total litres must remain null', path: ['totalAvailableLitres'] })
+})
+export type WarehouseStockUiSummary = z.infer<typeof warehouseStockUiSummarySchema>
 
 export const productDomainSummarySchema = z.object({
   scopeKey: z.string().min(1),
